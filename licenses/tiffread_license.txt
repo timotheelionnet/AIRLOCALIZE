@@ -1,0 +1,44 @@
+% ------------------------------------------------------------------------------
+%
+% If you would like to acknowledge tiffread2.m in a publication, 
+% please cite the article for which the macro was first written:
+%
+% Dynamic Concentration of Motors in Microtubule Arrays 
+% Francois Nedelec, Thomas Surrey and A.C. Maggs
+% Physical Review Letters 86: 3192-3195; 2001. 
+% DOI:	10.1103/PhysRevLett.86.3192
+%
+% Thank you!
+%
+%
+% Francois Nedelec
+% nedelec -at- embl.de
+% Cell Biology and Biophysics, EMBL; Meyerhofstrasse 1; 69117 Heidelberg; Germany
+% http://www.embl.org
+% http://www.cytosim.org
+%
+%
+% ------------------------------------------------------------------------------
+% Copyright (C) 1999-2014 Francois Nedelec, 
+% with contributions from:
+%   Kendra Burbank for the waitbar
+%   Hidenao Iwai for the code to read floating point images,
+%   Stephen Lang to be more compliant with PlanarConfiguration
+%   Jan-Ulrich Kreft for Zeiss LSM support
+%   Elias Beauchanp and David Kolin for additional Metamorph support
+%   Jean-Pierre Ghobril for requesting that image indices may be specified
+%   Urs Utzinger for the better handling of color images, and LSM meta-data
+%   O. Scott Sands for support of GeoTIFF tags
+%   Benjamin Bratton for Andor tags and more
+%   Linqing Feng for fixing a bug reading TIF.PlanarConfiguration == 2
+%   
+%
+% This program is free software: you can redistribute it and/or modify
+% it under the terms of the GNU General Public License as published by
+% the Free Software Foundation, version 3 of the License.
+%
+% This program is distributed in the hope that it will be useful,
+% but WITHOUT ANY WARRANTY; without even the implied warranty of
+% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+% GNU General Public License for more details:
+% <http://www.gnu.org/licenses/>.
