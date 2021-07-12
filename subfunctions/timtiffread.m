@@ -17,7 +17,7 @@ else
         [stack,nSlices] = readTifStackWithImRead(varargin{1}); % more stable reader but sometimes slower
         disp(' loaded image file with imRead');
     end
-
+    stack = double(stack);
 
 end
 
