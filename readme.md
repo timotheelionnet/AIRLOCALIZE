@@ -16,7 +16,7 @@ AIRLOCALIZE
 	- using the user interface: type in the Matlab command line AIRLOCALIZE(). 
 	A series of pop-up windows will guide you through the steps required to set the parameters. 
 	See the wiki for a more detailed how-to (https://github.com/timotheelionnet/AIRLOCALIZE/wiki)
-	- using a config file: type in the Matlab command line AIRLOCALIZE(<path to your config file>).
+	- using a config file: type in the Matlab command line AIRLOCALIZE('path/to/your/config/file').
 	For instance, to analyze of the examples:
 		- set Matlab's Current Folder to your AIRLOCALIZE folder. (if the current folder information is not displayed in the main window: on the Home tab, in the Environment section, click Layout. Then, in the Show section, select Current Folder.)
 		- type in the command line: AIRLOCALIZE('examples/2DsmFISH_humCells.ini');
