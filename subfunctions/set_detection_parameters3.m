@@ -1,4 +1,4 @@
-function [params,alData] = set_detection_parameters2(params)
+function [params,alData] = set_detection_parameters3(params)
 
 % initialize params structure and set to defaults if needed. (otherwise
 % values left in previous call to the function are used as the defaults)

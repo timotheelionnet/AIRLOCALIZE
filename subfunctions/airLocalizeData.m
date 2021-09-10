@@ -64,6 +64,14 @@ classdef airLocalizeData < handle
                         tmpfl = get_clean_file_list(params.dataFileName,...
                             [inclusionString,imgExt(i)] , exclusionString,...
                             params.recursive,caseSensitive);
+                        idx = ones(numel(tmpfl),1);
+                        for j=1:numel(tmpfl) %making sure that the files have a legit image extension
+                            [~,~,e] = fileparts(tmpfl{j});
+                            if ~ismember(e,imgExt)
+                                idx(j) = 0;
+                            end
+                        end
+                        tmpfl = tmpfl(logical(idx));
                         fl = [fl;tmpfl];
                     end
                     fl = unique(fl);
