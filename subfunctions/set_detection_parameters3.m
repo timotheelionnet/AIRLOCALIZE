@@ -76,7 +76,7 @@ end
 function params = get_image_file_location(params)
 % sets a pop up that collects the name of the file or directory to analyze.
 if ismember(params.fileProcessingMode,{'singleFile','singleFileMovie'})
-    [fname,sourceDir,fidx] = uigetfile('*.tif;*.stk;*.lsm','Select Source Image File');
+    [fname,sourceDir,fidx] = uigetfile('*.tiff;*.TIFF;*.TIF;*.tif;*.stk;*.lsm','Select Source Image File');
     if fidx == 0, params.fileProcessingMode = 'cancel'; return; end
     params.dataFileName = fullfile(sourceDir,fname);
     
