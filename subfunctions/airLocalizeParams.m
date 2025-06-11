@@ -913,7 +913,7 @@ classdef airLocalizeParams < handle
 
             d.threshUnits = 'absolute' ;
             t.threshUnits = {'char'} ;
-            p.threshUnits = {'absolute','SD','legacySD'};
+            p.threshUnits = {'absolute','SD','legacySD','adaptive'};
             n.threshUnits = 1 ;
             section.threshUnits = 'detectionSettings';
 
