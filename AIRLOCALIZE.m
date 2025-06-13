@@ -18,7 +18,7 @@ loc = [];
 %% collect parameters
 if nargin == 0  
     % if no input selected, enter parameters via GUI
-    [params,alData] = set_detection_parameters3(params); 
+    [params,alData] = set_detection_parameters4(params); 
     if strcmp(params.fileProcessingMode,'cancel'), return;  end 
     
 elseif nargin == 1
@@ -36,17 +36,17 @@ elseif nargin == 1
     disp('collecting list of files to analyze...');
     alData = airLocalizeData();
     alData.setFListFromParams(params);
-    if isempty(alData.getFList)
+    if isempty(alData.getImgFileList)
         disp('could not find files to analyze.');
         return
     else
-        disp(['Found ',num2str(numel(alData.getFList)),' files to analyze.']);
+        disp(['Found ',num2str(numel(alData.getImgFileList)),' files to analyze.']);
     end
     
     % if empty, default saving dir to the dir holding the first image in the
     % list
     if isempty(params.saveDirName)
-        params.saveDirName = fileparts(alData.fList{1});
+        params.saveDirName = fileparts(alData.imgFileList{1});
     end
 
     % set movie mode
@@ -57,7 +57,7 @@ elseif nargin == 1
     
     % figure out data dimensionality on first file of the list.
     disp('setting data dimensionality...');
-    params.getNumDim(alData.getFList);
+    params.getNumDim(alData.getImgFileList);
     if strcmp(params.fileProcessingMode,'cancel'), return;  end
     
     % check parameters consistency
@@ -90,7 +90,7 @@ if ~isempty(params.saveDirName)
     end
 end
 
-for i=1:numel(alData.fList)
+for i=1:numel(alData.imgFileList)
     % update the current file in the list
     alData.setFileIdx(i);
     disp(['analyzing file: ',alData.curFile,'...']);

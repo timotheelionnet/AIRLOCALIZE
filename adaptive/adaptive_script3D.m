@@ -39,6 +39,5 @@ paddingSize = 0;
 % loc: table listing the position and intensities of the spots, with
     % the format x,y,(z),Intensity,Intensity_Residuals,Object_ID
 loc = localizeFilePairAdaptive(imgName,maskName,psfSigma,threshFactor,...
-                    eliminateBackgroundSpots,backgroundID,paddingSize,...
                     'saveDirName','/Users/lionnt01/Documents/junk/');
 

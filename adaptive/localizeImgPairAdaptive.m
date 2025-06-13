@@ -1,80 +1,125 @@
 
-function loc = localizeFilePairAdaptive(imgName,maskName,psfSigma,threshFactor,...
-                    eliminateBackgroundSpots,backgroundID,paddingSize,varargin)
+function [loc,locVars,locParams] = localizeImgPairAdaptive(img,mask,varargin)
     % from a pair of a data image and a matching mask image, localizes
     % spots across all masks of the image, using an adaptive threshold that
     % is scaled to the intensity std within each mask.
+    
+    % the value of the threshold is set through name-value arguments, either 
+        % 'params' (airlocalizeParams object which contains the threshLevel property)
+        % or directly via 'threshLevel' argument (recommended value 6 in 2D, 12 is
+        % 3D).
+    % the size of the psf is set through name-value arguments, either 
+        % 'params' (airlocalizeParams object which contains the psfSigma property)
+        % or directly via 'psfSigma' argument.
 
     % INPUT
-    % imgName: file path of the data image (can be a z-stack)
-    % maskName: file path of the image (can be a z-stack or a 2D image if
+    % img: data image (can be a z-stack)
+    % mask: mask image (can be a z-stack or a 2D image if
         % the data image is a 3D stack)
-    % psfSigma: in 2D, sigma_xy; in 3D [sigma_xy, sigma_z] in pixel units;
+    
+    % optional arguments (name-value pair formatted)
+    % 'params': airLocalizeParams object that fitting options will be read
+        % from.
+    % 'psfSigma': in 2D, sigma_xy; in 3D [sigma_xy, sigma_z] in pixel units;
         % the width of the gaussian fitting the point spread function in 2D
-        % or 3D depending on the dimensionality of the image.
-    % threshFactor: the factor used to determine the intensity threshold of
+        % or 3D depending on the dimensionality of the image. 
+        % !!! THIS PARAMETER IS REQUIRED IF PARAMS IS NOT POPULATED !!!
+        % if both params and psfSigma arguments are input and psfSigma isnt
+        % empty, psfSigma overrides the value of the psfSigma property in
+        % params.
+    % 'threshLevel': the factor used to determine the intensity threshold of
         % the regions that are spot candidates. the threshold is set as
         % thresh = max(0,mode) + threshFactor * s; where mode is the
         % estimate of the mode of the intensity in the smoothed image of
         % each object; and s an estimate of the std of the intensisty in
         % the smoothed image of each object.
-    % saveDir: saving directory
-    % eliminateBackgroundSpots: set to 0 to eliminate background objects
+        % !!! THIS PARAMETER IS REQUIRED IF PARAMS IS NOT POPULATED !!!
+        % if both params and threshevels arguments are input and threshLevel isnt
+        % empty, threshLevel overrides the value of the threshLevel property in
+        % params.
+    % 'eliminateBackgroundSpots': set to 0 to eliminate background objects
         % (default is 1)
-    % backgroundID: ID of the background objects
+    % 'backgroundID': ID of the background objects
         % (default is 0)
-    % paddingSize: size in voxels of the padding around each object used before cropping.    
-
-    % optional (name-value pair formatted)
-    % saveDirName: path to the saving directory
+    % 'paddingSize': size in voxels of the padding around each object used 
+        % before cropping. Default (recommended): 0    
+    % 'verbose': sets the verbose setting (0 or 1) of the airlocalize 
+        % detection function (default 1).
     
     % OUTPUT
-    % loc: table listing the position and intensities of the spots, with
-    % the format x,y,(z),Intensity,Intensity_Residuals,Object_ID
-
+    % loc: npts * (ndims + 3) array listing the position and intensities of the spots, with
+        % the format x, y, (z if 3D), Intensity, Intensity_Residuals, Object_ID
+    % locVars: cell array holding the names of the variables in the loc array 
+    % locParams
+    
+    % collect optional arguments
     p = inputParser();
-    addParameter(p,'saveDirName','');    
+    addParameter(p,'locParams',[]); 
+    addParameter(p,'psfSigma',[]);
+    addParameter(p,'threshLevel',[]);  
+    addParameter(p,'eliminateBackgroundSpots',1);    
+    addParameter(p,'backgroundID',0);    
+    addParameter(p,'paddingSize',0);    
+    addParameter(p,'verbose',1);    
+    
     parse(p,varargin{:});
-    saveDirName = p.Results.saveDirName;
+    paddingSize = p.Results.paddingSize;
+    locParams = p.Results.locParams;
+    psfSigma = p.Results.psfSigma;
+    threshLevel = p.Results.threshLevel;
+    eliminateBackgroundSpots = p.Results.eliminateBackgroundSpots;
+    backgroundID = p.Results.backgroundID;
+    verbose = p.Results.verbose;
 
-    % load image and mask
-    img = timtiffread(imgName);
-    mask = timtiffread(maskName);
+    if isempty(locParams) && isempty(psfSigma)
+        error('You need to fill either locParams or psfSigma');
+    end
+    if isempty(locParams) && isempty(threshLevel)
+        error('You need to fill either locParams or threshLevel');
+    end
+
+    % initialize the Airlocalize structure that will hold the localization
+    % settings
     nd = ndims(img);
+    if isempty(locParams)  
+        locParams = airLocalizeParams();
+        locParams.reset;
+        locParams.numDim = nd; %: the number of dimensions of the image (2 or 3)
+        locParams.threshUnits = 'absolute'; % units of the threshold - absolute or SD
+        if nd == 2
+            locParams.fitMethod = '2DGaussianMask';
+        else
+            locParams.fitMethod = '3DMaskFull';
+        end
+    else
+        % create 'deep copy' of the object 
+        % (since locParams is a handle and we don't want to modify the original)
+        locParams = copy(locParams);
+    end
+    if ~isempty(psfSigma)
+        locParams.psfSigma = psfSigma;
+    end
+    if ~isempty(threshLevel)
+        locParams.threshLevel = threshLevel;
+    end
+    % safeguarding the threshLevel value now because we will update 
+    % the threshLevel property of locParams for each object during the loop
+    threshLevel = locParams.threshLevel;
+
+    % initialize Airlocalize structure that will hold the image data
+    alData = airLocalizeData();
+    alData.img = img; % holds the raw image/stack data of the current file
+    alData.isMovie = 0; 
+
     % replicate the mask in the third dim if it is two-dimensional and the
     % image is a stack.
     if nd == 3 && ismatrix(mask)
         mask = repmat(mask,1,1,size(img,3));
     end
     
-    % collect masks IDs
+    % collect list of masks IDs
     mList = collectMaskIds(mask,eliminateBackgroundSpots,backgroundID);
     nm = numel(mList);
-    
-    % initialize Airlocalize structure that will hold the image data
-    alData = airLocalizeData();
-    alData.curFile = imgName;
-    alData.img = img; % holds the raw image/stack data of the current file
-    alData.isMovie = 0; 
-    
-    % initialize the Airlocalize structure that will hold the localization
-    % settings
-    params = airLocalizeParams();
-    params.reset;
-    params.threshUnits = 'absolute'; % units of the threshold - absolute or SD
-    params.minDistBetweenSpots = 2; %: minimum allowed distance between local maxima
-    params.numDim = nd; %: the number of dimensions of the image (2 or 3)
-    params.outputSpotsImage = 1;
-    params.psfSigma = psfSigma;
-    if ~isempty(saveDirName)
-        params.saveDirName = saveDirName;
-    end
-    if nd == 2
-        params.fitMethod = '2DGaussianMask';
-    else
-        params.fitMethod = '3DMaskFull';
-    end
-    verbose = 1;
     
     %% loop through masks
     maskStats = zeros(nm,4);
@@ -87,7 +132,7 @@ function loc = localizeFilePairAdaptive(imgName,maskName,psfSigma,threshFactor,.
         % run gaussian localization on cropped mask
         alData.img = croppedImg; % current img
         alData.smooth = ...
-            smooth_image_and_subtract_background7(alData.img,params);
+            smooth_image_and_subtract_background7(alData.img,locParams);
         
         % get mean & std of intensity over the mask region
         [m,s,m2,s2] = getMeanStdInMask(alData.smooth,croppedMask,mList(i));
@@ -95,14 +140,14 @@ function loc = localizeFilePairAdaptive(imgName,maskName,psfSigma,threshFactor,.
         
         % compute threshold based on mask intensity - using the average of
         % the two "Standard deviations" bc it is a bit more robust
-        params.threshLevel = max(0,m2) + threshFactor*(s2+s)/2;
+        locParams.threshLevel = max(0,m2) + threshLevel*(s2+s)/2;
     
         spotCandidates = find_isolated_maxima_clean3(...
-                alData,params,verbose);   
+                alData,locParams,verbose);   
     
         % detection/quantification
         [tmpLoc,locVars] = run_gaussian_fit_on_all_spots_in_image3(...
-            spotCandidates,alData,params);
+            spotCandidates,alData,locParams);
         tmpLoc(:,nd+3) = mList(i); % updating the "frame" column to the mask ID
         
         % map spot coordinates in cropped image back to entire image.
@@ -126,21 +171,13 @@ function loc = localizeFilePairAdaptive(imgName,maskName,psfSigma,threshFactor,.
         loc = [loc;tmpLoc]; 
     end
 
-    % save spot coordinates and detection parameters to text file
+    % update ROI_ID as the column of the loc table normally used for frame numbers
     idx = ismember(locVars,'image_number');
     if sum(idx) ~= 0
         locVars{idx} = 'ROI_ID';
     end
-    params.saveLocAndPar(loc,locVars,alData);
-    
-    % generate tiff image
-    if params.outputSpotsImage
-        disp('  saving spots image...');
-        alData.img = img;
-        params.saveSpotImg(loc,locVars,alData);
-    end
-
 end
+
 %% functions
 
 %%

@@ -28,15 +28,58 @@ Add file lists in alData or params structure.
 From list of paired ing/mask files
 Go through list, update images, pass images to function.
 
-(1) Make function "barebones": take images as input, output loc file. 
+X (1) Make function "barebones": take images as input, output loc file. 
 Do not save or generate images.
 
-(2) setup adaptive flag in params
+X (2) setup adaptive flag in params
 
-(3) setup input of the mask folder 
+X (3) setup input of the mask folder 
 
 (4) setup generation of the paired file lists
+setFListFromParams
+Replicate this func to get the mask files.
+Then write a func to match
+Then update all the functions that set the current image or file and/or retrieve the image or mask.
+
 
 (5) modify body of airlocalize to handle the masks
 
 (6) update the threshold setting GUI to work in the adaptive mode. 
+
+****
+Ensure that the passing of params settings from main air localize to adaptive_loc_function works.
+Threshold option adaptive?
+Duplicate handle so I don't mess with the original?
+
+% currently local alData object sets isMovie to zero, problem for movies?
+
+
+*****
+Refactoring
+alData
+flist -> imgFileList
+curFile -> curImgFile
+Added:
+maskFileList
+curMaskFile
+Mask
+
+
+alParams
+dataFileName -> imgFileName
+
+*****
+Next to do: 
+In alData:
+setFListFromParams
+
+In alParams:
+getFListAndNumDim
+getFList
+
+Calls get_clean_file_list
+
+******
+To check: 
+alParams.read_params_from_file -> is the code compatible with new property names?
+In alParams; in convert to legacy: is the absence of imgExclusion or mask variables gonna be a problem?

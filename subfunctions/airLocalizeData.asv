@@ -56,59 +56,47 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
             obj.reset();
             if ismember(params.fileProcessingMode,...
                     {'batch','movieInDir','batchMovie'})
-                if ~exist(params.imgFileName,'dir')
+                if ~exist(params.dataFileName,'dir')
                     obj.imgFileList = obj.setImgFileList({});
-                    disp(['Could not find data folder ',params.imgFileName]);
+                    disp(['Could not find data folder ',params.dataFileName]);
                     return
                 else
                     caseSensitive = 0;
                     
                     %format comma-separated list into cell arrays of substrings
-                    fl = getList(params.imgFileName,params.recursive,...
-                        caseSensitive,params.imgInclusionString,params.imgExclusionString);
-
-
+                    inclusionString = parse_and_format_string_list(params.inclusionString);
+                    exclusionString = parse_and_format_string_list(params.exclusionString);
+                    imgExt = getAllowedImageFormatExtensions();
+                    fl = {};
+                    for i=1:numel(imgExt)
+                        tmpfl = get_clean_file_list(params.dataFileName,...
+                            [inclusionString,imgExt(i)] , exclusionString,...
+                            params.recursive,caseSensitive);
+                        idx = ones(numel(tmpfl),1);
+                        for j=1:numel(tmpfl) %making sure that the files have a legit image extension
+                            [~,~,e] = fileparts(tmpfl{j});
+                            if ~ismember(e,imgExt)
+                                idx(j) = 0;
+                            end
+                        end
+                        tmpfl = tmpfl(logical(idx));
+                        fl = [fl;tmpfl];
+                    end
+                    fl = unique(fl);
                 end
             else
-                if ~exist(params.imgFileName,'file')
+                if ~exist(params.dataFileName,'file')
                     obj.imgFileList = obj.setImgFileList([]);
-                    disp(['Could not find data file ',params.imgFileName]);
+                    disp(['Could not find data file ',params.dataFileName]);
                     return
                 else
-                    fl = {params.imgFileName};
+                    fl = {params.dataFileName};
                 end
             end
             obj.setImgFileList(fl);
             if ismember(params.fileProcessingMode,...
                     {'singleMovie','batchMovie'})
                 obj.isMovie = 1;
-            end
-            
-            % collect list of files respecting the name rules
-            function fl = getList(fileName,recursive,...
-                    caseSensitive,inclusionString,exclusionString)
-
-                %format comma-separated list into cell arrays of substrings
-                inclusionString = parse_and_format_string_list(inclusionString);
-                exclusionString = parse_and_format_string_list(exclusionString);
-                
-                imgExt = getAllowedImageFormatExtensions();
-                fl = {};
-                for i=1:numel(imgExt)
-                    tmpfl = get_clean_file_list(fileName,...
-                        [inclusionString,imgExt(i)] , exclusionString,...
-                        recursive,caseSensitive);
-                    idx = ones(numel(tmpfl),1);
-                    for j=1:numel(tmpfl) %making sure that the files have a legit image extension
-                        [~,~,e] = fileparts(tmpfl{j});
-                        if ~ismember(e,imgExt)
-                            idx(j) = 0;
-                        end
-                    end
-                    tmpfl = tmpfl(logical(idx));
-                    fl = [fl;tmpfl];
-                end
-                fl = unique(fl);
             end
         end
         
@@ -247,9 +235,9 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
         function isLoaded = isFileIndexMaskLoaded(obj,idx)
             isLoaded = 0;
             if obj.fileIdx == idx && idx > 0 && idx <= numel(obj.maskFileList) ...
-                && ~isempty(obj.curMaskFile) && ~isempty(obj.mask)
-                if numel(obj.maskFileList) >= idx
-                    if strcmp(obj.curMaskFile,obj.maskFileList{idx})
+                && ~isempty(obj.curImgFile) && ~isempty(obj.img)
+                if numel(obj.imgFileList) >= idx
+                    if strcmp(obj.curImgFile,obj.imgFileList{idx})
                         isLoaded = 1;
                     end
                 end

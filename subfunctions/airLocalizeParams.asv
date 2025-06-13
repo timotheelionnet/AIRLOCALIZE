@@ -4,12 +4,13 @@ classdef airLocalizeParams < handle & matlab.mixin.Copyable
     properties (GetAccess = 'public', SetAccess = 'public')
         %% [Files]  
 
-        % path to image file name / folder name for batch analysis
-        imgFileName;
+        % path to data file name / folder name for batch analysis
+        dataFileName;
 
         % path to mask file name / folder name - only used if 'adaptive' mode is
         % selected
         maskFileName;
+
 
         % path to saving directory
         saveDirName;
@@ -162,10 +163,10 @@ classdef airLocalizeParams < handle & matlab.mixin.Copyable
             % save parameter file
             [~,~,e] = fileparts(parFileName);
             if strcmp(e,'.par4')
-                % replace imgFileName (which can be the input folder name 
+                % replace dataFileName (which can be the input folder name 
                 % if batch with current data file name
                 p2 = obj.duplicate();
-                p2.imgFileName = alData.curImgFile;
+                p2.dataFileName = alData.curFile;
                 
                 % save as ini file
                 overwrite = 1;
@@ -224,7 +225,7 @@ classdef airLocalizeParams < handle & matlab.mixin.Copyable
                 obj.useLegacyFormats = defaults.useLegacyFormats;
             end
 
-            [d,f,~] = fileparts(alData.curImgFile);
+            [d,f,~] = fileparts(alData.curFile);
 
             % use saving directory if specified, 
             % otherwise analysis files will be saved next to original images
@@ -529,7 +530,7 @@ classdef airLocalizeParams < handle & matlab.mixin.Copyable
                             return
                         end
                     end
-                case 'imgExclusionString'
+                case 'imgIxclusionString'
                     if contains(obj.fileProcessingMode,'single')
                         if ~isempty(obj.imgExclusionString)
                             status = 'failed';
@@ -543,7 +544,7 @@ classdef airLocalizeParams < handle & matlab.mixin.Copyable
                             return
                         end
                     end
-                case 'maskExclusionString'
+                case 'maskIxclusionString'
                     if contains(obj.fileProcessingMode,'single')
                         if ~isempty(obj.maskExclusionString)
                             status = 'failed';
@@ -777,23 +778,23 @@ classdef airLocalizeParams < handle & matlab.mixin.Copyable
         % collects list of files to analyze
         function fList = getFList(obj)
             if ismember(obj.fileProcessingMode,{'batch','movieInDir','batchMovie'}) 
-                if ~exist(obj.imgFileName,'dir')
+                if ~exist(obj.dataFileName,'dir')
                     fList = [];
-                    disp(['Could not find data folder ',obj.imgFileName]);
+                    disp(['Could not find data folder ',obj.dataFileName]);
                     return
                 else
                     caseSensitive = 0;
-                    fList = get_clean_file_list(obj.imgFileName,...
+                    fList = get_clean_file_list(obj.dataFileName,...
                         obj.imgInclusionString , obj.imgExclusionString,...
                         obj.imgRecursive,caseSensitive);
                 end
             else
-                if ~exist(obj.imgFileName,'file')
+                if ~exist(obj.dataFileName,'file')
                     fList = [];
-                    disp(['Could not find data file ',obj.imgFileName]);
+                    disp(['Could not find data file ',obj.dataFileName]);
                     return
                 else
-                    fList = {obj.imgFileName};
+                    fList = {obj.dataFileName};
                 end
             end
         end
@@ -849,7 +850,7 @@ classdef airLocalizeParams < handle & matlab.mixin.Copyable
                             end
                         end
                     end
-                    p2.data_stackname = alData.curImgFile;
+                    p2.data_stackname = alData.curFile;
                     varargout{1} = p2;
                 case 'fromLegacy'
                     % reset object
@@ -910,11 +911,11 @@ classdef airLocalizeParams < handle & matlab.mixin.Copyable
             %% [Files]  
 
             % path to data file name / folder name for batch analysis
-            d.imgFileName = '';
-            t.imgFileName = {'char'};
-            p.imgFileName = {};
-            n.imgFileName = 1;
-            section.imgFileName = 'Files';
+            d.dataFileName = '';
+            t.dataFileName = {'char'};
+            p.dataFileName = {};
+            n.dataFileName = 1;
+            section.dataFileName = 'Files';
             
             % path to mask file name / folder name for batch analysis
             d.maskFileName = '';
@@ -1151,7 +1152,7 @@ classdef airLocalizeParams < handle & matlab.mixin.Copyable
         function v = getVariableCheatSheet(~)
             v = { ... 
                  'fileProcessingMode','mode';...
-                 'imgFileName','data_stackname';...
+                 'dataFileName','data_stackname';...
                  'saveDirName','save_dirname';...
                  'imgInclusionString','inclusion_string';...
                  'imgExclusionString','exclusion_string';...
