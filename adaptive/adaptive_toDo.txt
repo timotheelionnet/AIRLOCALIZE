@@ -1,0 +1,42 @@
+**
+Modes
+Single image
+Batch img
+Single Movie Frames in dir
+Movie single file
+Batch movies
+
+**
+Set adaptive option in first window? 
+Setup a flag in params folder
+
+Airlocalize
+File/folder input
+add the mask (file or folder) input
+Handle input from cfg file.
+Enter an extra entry for file/folder in the GUI 
+
+Generate a new params object for the mask folder and/or filename (data?)
+
+Interactive parameter setting
+Modify the GUI to have adaptive threshold.
+
+Generate list of matched file pairs for batch treatment
+Based on the two folders, use fileset to generate the matched pairs of file names
+Add file lists in alData or params structure.
+
+From list of paired ing/mask files
+Go through list, update images, pass images to function.
+
+(1) Make function "barebones": take images as input, output loc file. 
+Do not save or generate images.
+
+(2) setup adaptive flag in params
+
+(3) setup input of the mask folder 
+
+(4) setup generation of the paired file lists
+
+(5) modify body of airlocalize to handle the masks
+
+(6) update the threshold setting GUI to work in the adaptive mode. 

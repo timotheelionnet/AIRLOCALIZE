@@ -1,21 +1,23 @@
 % adaptive script
-% paths
-imgName = 'examples/adaptive_examples/MFGTMP_250324110001_B02f00d1.TIFF';
-maskName = 'examples/adaptive_examples/MFGTMP_250324110001_B02f00d1_cp_masks.tif';
+
+% file paths
+imgName = 'examples/adaptive_examples/MFGTMP_250324110001_B02f01d1.TIFF';
+maskName = 'examples/adaptive_examples/MFGTMP_250324110001_B02f01d1_cp_masks.tif';
+
+% key parameter: factor that will be multiplied to the std of the mask
+% (recommended: 6)
+threshFactor = 6;
 
 % options
-
-% if selected, eliminates spots in the background region
+% if = 1, eliminates spots in the background region; set to 0 to keep (default: 1)
 eliminateBackgroundSpots = 1;
 
 % pixel value that marks the backgorund spots. If set to NaN, the region
-% with minimal pixel value will be eliminated.
+% with minimal pixel value will be eliminated (default: 0)
 backgroundID = 0;
 
-% factor that will be multiplied to the std of the mask
-threshFactor = 8;
-
-% adding 10 pixels around each mask in the cropped image
+% size of the pixel padding around each mask in the cropped image (default:
+% 0)
 paddingSize = 0;
 
 %% load image and mask
@@ -41,6 +43,7 @@ params.outputSpotsImage = 1;
 params.psfSigma = 1.3;
 params.fitMethod = '2DGaussianMask';
 verbose = 1;
+
 %% loop through masks
 maskStats = zeros(nm,4);
 loc = [];
@@ -60,7 +63,7 @@ for i=1:nm
     maskStats(i,:) = [m,s,m2,s2];
     
     % compute threshold based on mask intensity
-    params.threshLevel = max(0,m2) + threshFactor*s2;
+    params.threshLevel = max(0,m2) + threshFactor*(s2+s)/2;
     %params.threshLevel = threshFactor*s2;
 
     spotCandidates = find_isolated_maxima_clean3(...
@@ -90,7 +93,6 @@ for i=1:nm
     
     % compile spots into full list 
     loc = [loc;tmpLoc]; 
-
 end
 
 %%

@@ -8,7 +8,7 @@ recursive=0
 [detectionSettings]
 psfSigma=1.3
 threshUnits=absolute
-threshLevel=96.6158
+threshLevel=100.9194
 maxSpots=20000
 fitMethod=2DGaussianMask
 
