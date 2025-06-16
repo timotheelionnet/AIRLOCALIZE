@@ -78,13 +78,13 @@ function params = get_image_file_location(params)
         disp('picking input image file...');
         [fname,sourceDir,fidx] = uigetfile('*.tiff;*.TIFF;*.TIF;*.tif;*.stk;*.lsm','Select Source Image File');
         if fidx == 0, params.fileProcessingMode = 'cancel'; return; end
-        params.dataFileName = fullfile(sourceDir,fname);
+        params.imgFileName = fullfile(sourceDir,fname);
         
     elseif ismember(params.fileProcessingMode,{'batch','movieInDir','batchMovie'})
         disp('picking input image directory...');
         sourceDir = uigetdir('','Select Source Images Directory');
         if sourceDir == 0, params.fileProcessingMode = 'cancel'; return; end
-        params.dataFileName = sourceDir;
+        params.imgFileName = sourceDir;
     end
     params.saveDirName = sourceDir;
     
@@ -93,13 +93,14 @@ function params = get_image_file_location(params)
     if params.adaptive
         if ismember(params.fileProcessingMode,{'singleFile','singleFileMovie'})
             disp('picking input mask file...');
-            [fname,maskDir,fidx] = uigetfile('*.tiff;*.TIFF;*.TIF;*.tif;*.stk;*.lsm','Select Source Mask File');
+            [fname,maskDir,fidx] = uigetfile('*.tiff;*.TIFF;*.TIF;*.tif;*.stk;*.lsm',...
+                'Select Source Mask File',sourceDir);
             if fidx == 0, params.fileProcessingMode = 'cancel'; return; end
             params.maskFileName = fullfile(maskDir,fname);
             
         elseif ismember(params.fileProcessingMode,{'batch','movieInDir','batchMovie'})
             disp('picking input mask directory...');
-            maskDir = uigetdir('','Select Source Mask Directory');
+            maskDir = uigetdir(sourceDir,'Select Source Mask Directory');
             if maskDir == 0, params.fileProcessingMode = 'cancel'; return; end
             params.maskFileName = maskDir;
         end

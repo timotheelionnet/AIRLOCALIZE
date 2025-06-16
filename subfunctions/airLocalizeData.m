@@ -17,7 +17,6 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
     end
     
     methods
-        
         % constructor
         function obj = airLocalizeData()
              obj.reset();
@@ -53,32 +52,56 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
         % based on dataFileName and fileProcessingMode properties of params
         % airlocalizeParams object.
         function obj = setFileListFromParams(obj,params)
+            params.imgFileName
             obj.reset();
             if ismember(params.fileProcessingMode,...
                     {'batch','movieInDir','batchMovie'})
                 if ~exist(params.imgFileName,'dir')
-                    obj.imgFileList = obj.setImgFileList({});
+                    obj.setImgFileList({});
+                    obj.setMaskFileList({});
                     disp(['Could not find data folder ',params.imgFileName]);
                     return
                 else
                     caseSensitive = 0;
-                    
-                    %format comma-separated list into cell arrays of substrings
-                    fl = getList(params.imgFileName,params.recursive,...
+                    fl = getList(params.imgFileName,params.imgRecursive,...
                         caseSensitive,params.imgInclusionString,params.imgExclusionString);
-
-
+                    
+                    if params.adaptive
+                        flm = getList(params.maskFileName,params.maskRecursive,...
+                            caseSensitive,params.maskInclusionString,params.maskExclusionString);
+                        fileNamesOnly = 0; % match full paths
+                        matchedPairs = match_file_pairs(fl, flm,fileNamesOnly);
+                        disp(['Matched ',num2str(size(matchedPairs,1)),...
+                            ' image files with their corresponding masks.']);
+                        fl = fl(matchedPairs(:,1));
+                        flm = flm(matchedPairs(:,2));
+                    else
+                        flm = {};
+                    end
                 end
             else
                 if ~exist(params.imgFileName,'file')
-                    obj.imgFileList = obj.setImgFileList([]);
+                    obj.setImgFileList({});
+                    obj.setMaskFileList({});
                     disp(['Could not find data file ',params.imgFileName]);
                     return
                 else
                     fl = {params.imgFileName};
                 end
+                if params.adaptive
+                    if ~exist(params.maskFileName,'file')
+                        obj.setMaskFileList({});
+                        disp(['Could not find data file ',params.maskFileName]);
+                        return
+                    else
+                        flm = {params.maskFileName};
+                    end
+                else
+                    flm = {};
+                end
             end
             obj.setImgFileList(fl);
+            obj.setMaskFileList(flm);
             if ismember(params.fileProcessingMode,...
                     {'singleMovie','batchMovie'})
                 obj.isMovie = 1;
@@ -114,7 +137,9 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
         
         % sets a file list as the imgFileList property
         function obj = setImgFileList(obj,fList)
+            mList = obj.maskFileList; % keep the mask list before the reset
             obj.reset();
+            obj.maskFileList = mList;
             if iscell(fList)
                 obj.imgFileList = fList;
             else 
@@ -130,7 +155,9 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
 
         % sets a file list as the imgFileList property
         function obj = setMaskFileList(obj,fList)
+            iList = obj.imgFileList; % keep the img list before the reset
             obj.reset();
+            obj.imgFileList = iList;
             if iscell(fList)
                 obj.maskFileList = fList;
             else 

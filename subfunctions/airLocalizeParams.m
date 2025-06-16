@@ -771,7 +771,6 @@ classdef airLocalizeParams < handle & matlab.mixin.Copyable
                 obj.fileProcessingMode = 'cancel';
                 return
             end
-
         end
         
         % collects list of files to analyze

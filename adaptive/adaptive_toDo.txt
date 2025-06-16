@@ -1,33 +1,4 @@
 **
-Modes
-Single image
-Batch img
-Single Movie Frames in dir
-Movie single file
-Batch movies
-
-**
-Set adaptive option in first window? 
-Setup a flag in params folder
-
-Airlocalize
-File/folder input
-add the mask (file or folder) input
-Handle input from cfg file.
-Enter an extra entry for file/folder in the GUI 
-
-Generate a new params object for the mask folder and/or filename (data?)
-
-Interactive parameter setting
-Modify the GUI to have adaptive threshold.
-
-Generate list of matched file pairs for batch treatment
-Based on the two folders, use fileset to generate the matched pairs of file names
-Add file lists in alData or params structure.
-
-From list of paired ing/mask files
-Go through list, update images, pass images to function.
-
 X (1) Make function "barebones": take images as input, output loc file. 
 Do not save or generate images.
 
@@ -35,26 +6,79 @@ X (2) setup adaptive flag in params
 
 X (3) setup input of the mask folder 
 
-(4) setup generation of the paired file lists
+X (4) setup generation of the paired file lists
 setFListFromParams
 Replicate this func to get the mask files.
 Then write a func to match
 Then update all the functions that set the current image or file and/or retrieve the image or mask.
 
-
 (5) modify body of airlocalize to handle the masks
 
 (6) update the threshold setting GUI to work in the adaptive mode. 
 
-****
+**** to check: 
 Ensure that the passing of params settings from main air localize to adaptive_loc_function works.
 Threshold option adaptive?
 Duplicate handle so I don't mess with the original?
 
 % currently local alData object sets isMovie to zero, problem for movies?
+ 
+alParams.read_params_from_file -> is the code compatible with new property names?
+In alParams; in convert to legacy: is the absence of imgExclusion or mask variables gonna be a problem?
+
+alData.setCurFrame how do we handle movies?
+
+psfSigma is not a scalar? Is the dimensionality well handled?
+How are the thresh values handled by the GUI where we set thresh value and psf?
+This GUI should be updated for the adaptive case so it does show the adequate info, not the absolute/SD units.
+Is the thresh value overriden?
+Is the verbose slowing things down? I should Remove display of spots per mask or at least make it optional.
+Add note in the file loader if the file list is long that it might take a minute.
+
+%%%%%%
+Next steps:
+Test 3D single image, 3D batch, movie. Make sure all cases are handled correctly.
+Update the interactive spot selection to make it compatible with threshold selection in the adaptive mode.
+Add a way to fine scroll to find spots.
+
+******
+Zoom on GUI
+Add note on the GUI to use ctrl+/cmd+- to zoom in/out
+
+In snap mode, arrows move position in x,y by pixel increments.
+%hstate value = 1: grab
+%hstate value = 2: snap
+
+'WindowKeyPressFcn' moveCursorByArrow
+Check that we are in grab mode
+Switch event.Key
+Case 'leftarrow'
+Move freeze by 1
+replot
+Etc
+
+point = get(gca,'CurrentPoint');
+        yfreeze = round(point(1,1));    %note the inverse convention for mouse and array (xy -> yx)
+        xfreeze = round(point(1,2));
+        xfreeze = max(1,min(xfreeze,nx));
+        yfreeze = max(1,min(yfreeze,ny));
+
+***** GUI for masks
+Retrieve smoothed image:
+In adaptive mode, make a "smoothed image" that is:
+- zero everywhere outside of masks
+- subtracted by the mode within each mask
+- divide the remaining by the pseudo sd
+Then use that as an image to set the threshold uniformly.
+
+Use that to detect spots. 
+Then at the end of the detection run, assign spots their mask IDs based on the mask value where the spot fell.
+
+For the mask bandpass filter - pad the cropped region with the average value at the boundary: erode then take the diff pixels and find the average.
 
 
-*****
+
+***** residuals
 Refactoring
 alData
 flist -> imgFileList
@@ -68,8 +92,7 @@ Mask
 alParams
 dataFileName -> imgFileName
 
-*****
-Next to do: 
+
 In alData:
 setFListFromParams
 
@@ -79,7 +102,9 @@ getFList
 
 Calls get_clean_file_list
 
-******
-To check: 
-alParams.read_params_from_file -> is the code compatible with new property names?
-In alParams; in convert to legacy: is the absence of imgExclusion or mask variables gonna be a problem?
+Modes
+Single image
+Batch img
+Single Movie Frames in dir
+Movie single file
+Batch movies
