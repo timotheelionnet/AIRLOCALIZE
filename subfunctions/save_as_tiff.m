@@ -35,7 +35,7 @@ if ndims(img) == 2 || (ndims(img) == 3 && size(img,3) == 1)
 elseif (ndims(img) == 3 && size(img,3) ~= 1)
     %% 3d stack 
     if(normalize==1)
-        img = (img-min(min(min(img))))/max(max(max(img)))*65536;
+        img = (img-min(img(:)))/(max(img(:)) - min(img(:)) )*65536;
     end
     
     img = uint16(img);
