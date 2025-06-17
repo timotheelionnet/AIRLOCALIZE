@@ -9,7 +9,16 @@ function maxima = find_isolated_maxima_clean3(alData,params,verbose)
     % the curFrame field that instruct which frame to process.
 % params is an airlocalizeParams object that needs to contain the following properties: 
     % threshLevel: value of the threshold
-    % threshUnits: units of the threshold - absolute or SD
+    % threshUnits: units of the threshold; can be:
+        % - absolute: threshold is applied in intensity counts to the smoothed image, 
+        % - SD: threhsold value is in units of the std of the intensity of
+                % the original image
+        % - legacySD: threhsold value is in units of the std of the intensity of
+                % the *spatially bandpassed* image
+        % - adaptive: threshold value is in units of the std of *each ROI* 
+                % within the *spatially bandpassed* image (requires masks).
+                % the smooth image has been preset by
+                % alData.RetrieveSmoothedImg()
     % minDistBetweenSpots: minimum allowed distance between local maxima
     % numDim: the number of dimensions of the image (2 or 3)
 
@@ -47,6 +56,13 @@ elseif strcmp(params.threshUnits,'legacySD')
         disp(['  threshold value is ', num2str(params.threshLevel),...
         ' in (legacy) SD units, i.e. ', num2str(threshInt),...
         ' in absolute units for current frame']); 
+    end
+elseif strcmp(params.threshUnits,'adaptive')
+    % in adaptive units, the image is smoothed and normalized locally based
+    % on masks
+    threshInt = params.threshLevel;
+    if verbose
+        disp(['  threshold value is ' num2str(threshInt) ' in adaptive units']);
     end
 end
 

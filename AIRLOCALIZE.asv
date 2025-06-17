@@ -8,19 +8,20 @@ function loc = AIRLOCALIZE(varargin)
     % AIRLOCALIZE()  (a pop up will appear for file loading)
     % GUI mode is compatible with batch analysis.
     
-% AIRLOCALIZE_version = 1.6;  
+% AIRLOCALIZE_version = 1.7;  
 
 addpath('subfunctions');
 addpath('subfunctions/iniconfig');
 
 persistent params;
 loc = [];
+verbose = 1;
+
 %% collect parameters
 if nargin == 0  
     % if no input selected, enter parameters via GUI
     [params,alData] = set_detection_parameters4(params); 
-    if strcmp(params.fileProcessingMode,'cancel'), return;  end 
-    
+    if strcmp(params.fileProcessingMode,'cancel'), return;  end   
 elseif nargin == 1
     % read parameters from config file
     disp('reading config file...');
@@ -93,9 +94,9 @@ end
 for i=1:numel(alData.imgFileList)
     % update the current file in the list
     alData.setFileIdx(i);
-    disp(['analyzing file: ',alData.curFile,'...']);
+    disp(['analyzing file: ',alData.curImgFile,'...']);
     
-    % retrieve current image and smooth it
+    % retrieve current image
     overwrite = i~=1;
     alData.retrieveImg(overwrite);
     
@@ -127,11 +128,13 @@ for i=1:numel(alData.imgFileList)
         continue;
     end
 
-    % smooth tentire image unless the local threshold mode ('adaptive') has
-    % been selected
-    if ~params.adaptive
-        alData.retrieveSmoothedImg(params,overwrite);
+    % retrieve mask if in adaptive mode
+    if params.adaptive
+        alData.retrieveMask(overwrite);
     end
+
+    % smooth the image
+    alData.retrieveSmoothedImg(params,overwrite);
 
     % go through all frames (if file is an image, just one "frame")
     loc = [];
@@ -149,16 +152,48 @@ for i=1:numel(alData.imgFileList)
         % update current frame
         alData.setCurFrame(j);
         
-        % predetection of local maxima
-        verbose = 1;
-        spotCandidates = find_isolated_maxima_clean3(...
-            alData,params,verbose);   
+        [tmpLoc,tmpLocVars] = localizeImgPairAdaptive(...
+                alData.img,alData.mask,'locParams',params);
+        if isempty(tmpLocVars)
+            locVars = tmpLocVars;
+        end
 
-        % detection/quantification
-        [tmpLoc,locVars] = run_gaussian_fit_on_all_spots_in_image3(...
-        spotCandidates,alData,params);
-        
-        loc = [loc; tmpLoc];
+        % add mask IDs to each spot if adaptive mode was selected
+        if strcmp(params.threshUnits,'adaptive')
+            tmpRoiID = [];
+            if ismember(ndims(alData.mask),[2,3])
+                if ismatrix(alData.mask)
+                    idx = sub2ind(size(alData.mask), ...
+                        ceil(tmpLoc(:,1)),ceil(tmpLoc(:,2)) );
+                elseif ndims(alData.mask) == 3
+                    idx = sub2ind(size(alData.mask), ...
+                        ceil(tmpLoc(:,1)),ceil(tmpLoc(:,2)),ceil(tmpLoc(:,3)) );
+                end
+                tmpRoiID = alData.mask(idx);
+            end 
+            if ~isempty(tmpRoiID)
+                tmpLoc = [tmpLoc(:,end-1),tmpRoiID,tmpLoc(:,end)];
+                tmpLocVars = [tmpLocVars(1:end-1),'ROI_ID',tmpLocVars(end)];
+            end
+        end
+
+        % if ~params.adaptive
+        %     % predetection of local maxima
+        %     spotCandidates = find_isolated_maxima_clean3(...
+        %         alData,params,verbose);   
+        % 
+        %     % detection/quantification
+        %     [tmpLoc,locVars] = run_gaussian_fit_on_all_spots_in_image3(...
+        %     spotCandidates,alData,params);
+        % else
+        %     [tmpLoc,locVars] = localizeImgPairAdaptive(...
+        %         alData.img,alData.mask,'locParams',params);
+        % end
+        if isequal(locVars,tmpLocVars)
+            loc = [loc; tmpLoc];
+        else
+            
+        end
     end
     
     % save spot coordinates and detection parameters to text file
@@ -168,11 +203,34 @@ for i=1:numel(alData.imgFileList)
         disp('  saving spots image...');
         params.saveSpotImg(loc,locVars,alData);
     end
-    
     disp('  done analyzing file.');
 end
 disp('done.');
 
+end
+
+function C = concatenateRowsBasedOnStrings(data1,data2,vars1,vars2)
+    % Ensure strings for robust comparison
+    keys1 = string(vars1);
+    keys2 = string(vars2);
+    
+    n2 = size(data2,1);
+    for i=1:numel(keys1)
+        idx = ismember(keys2,key1)
+    en
+    end
+
+    % Preallocate aligned B with NaNs
+    nRows = size(A, 1);
+    nColsA = numel(keys1);
+    B_aligned = NaN(nRows, nColsA);
+
+    % Fill in matched columns
+    matched = idx2 > 0;
+    B_aligned(:, matched) = B(:, idx2(matched));
+
+    % Concatenate
+    C = [A, B_aligned];
 end
 
 

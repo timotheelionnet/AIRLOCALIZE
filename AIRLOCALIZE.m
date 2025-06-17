@@ -128,13 +128,13 @@ for i=1:numel(alData.imgFileList)
         continue;
     end
 
-    % smooth the entire image unless the local threshold mode ('adaptive') has
-    % been selected
-    if ~params.adaptive
-        alData.retrieveSmoothedImg(params,overwrite);
-    else
+    % retrieve mask if in adaptive mode
+    if params.adaptive
         alData.retrieveMask(overwrite);
     end
+
+    % smooth the image
+    alData.retrieveSmoothedImg(params,overwrite);
 
     % go through all frames (if file is an image, just one "frame")
     loc = [];
@@ -152,19 +152,49 @@ for i=1:numel(alData.imgFileList)
         % update current frame
         alData.setCurFrame(j);
         
-        if ~params.adaptive
-            % predetection of local maxima
-            spotCandidates = find_isolated_maxima_clean3(...
-                alData,params,verbose);   
-    
-            % detection/quantification
-            [tmpLoc,locVars] = run_gaussian_fit_on_all_spots_in_image3(...
-            spotCandidates,alData,params);
-        else
-            [tmpLoc,locVars] = localizeImgPairAdaptive(...
+        [tmpLoc,tmpLocVars] = localizeImgPairAdaptive(...
                 alData.img,alData.mask,'locParams',params);
+        if isempty(tmpLocVars)
+            locVars = tmpLocVars;
         end
-        loc = [loc; tmpLoc];
+
+        % add mask IDs to each spot if adaptive mode was selected
+        if strcmp(params.threshUnits,'adaptive')
+            tmpRoiID = [];
+            if ismember(ndims(alData.mask),[2,3])
+                if ismatrix(alData.mask)
+                    idx = sub2ind(size(alData.mask), ...
+                        ceil(tmpLoc(:,1)),ceil(tmpLoc(:,2)) );
+                elseif ndims(alData.mask) == 3
+                    idx = sub2ind(size(alData.mask), ...
+                        ceil(tmpLoc(:,1)),ceil(tmpLoc(:,2)),ceil(tmpLoc(:,3)) );
+                end
+                tmpRoiID = alData.mask(idx);
+            end 
+            if ~isempty(tmpRoiID)
+                tmpLoc = [tmpLoc(:,end-1),tmpRoiID,tmpLoc(:,end)];
+                tmpLocVars = [tmpLocVars(1:end-1),'ROI_ID',tmpLocVars(end)];
+            end
+        end
+
+        % if ~params.adaptive
+        %     % predetection of local maxima
+        %     spotCandidates = find_isolated_maxima_clean3(...
+        %         alData,params,verbose);   
+        % 
+        %     % detection/quantification
+        %     [tmpLoc,locVars] = run_gaussian_fit_on_all_spots_in_image3(...
+        %     spotCandidates,alData,params);
+        % else
+        %     [tmpLoc,locVars] = localizeImgPairAdaptive(...
+        %         alData.img,alData.mask,'locParams',params);
+        % end
+        if isequal(locVars,tmpLocVars)
+            loc = [loc; tmpLoc];
+        else
+            loc = concatenateRowsBasedOnStrings(...
+                loc,tmpLoc,locVars,tmpLocVars);
+        end
     end
     
     % save spot coordinates and detection parameters to text file
@@ -178,6 +208,25 @@ for i=1:numel(alData.imgFileList)
 end
 disp('done.');
 
+end
+
+function c = concatenateRowsBasedOnStrings(data1,data2,vars1,vars2)
+    % Ensure strings for robust comparison
+    keys1 = string(vars1);
+    keys2 = string(vars2);
+    
+    n2 = size(data2,1);
+    tmpData2 = [];
+    for i=1:numel(keys1)
+        idx = ismember(keys2,key1{i});
+        if sum(idx) == 1
+            tmpData2 = [tmpData2, data2(:,idx)];
+        else
+            tmpData2 = [tmpData2, NaN*ones(n2,1)];
+        end
+    end
+
+    c = [data1;tmpData2];
 end
 
 

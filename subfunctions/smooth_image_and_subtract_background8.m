@@ -20,7 +20,7 @@ function smooth = smooth_image_and_subtract_background8(img,params,varargin)
     eliminateBackgroundSpots = p.Results.eliminateBackgroundSpots;
     backgroundID = p.Results.backgroundID;
     paddingSize = p.Results.paddingSize;
-    
+
     if isempty(mask)
         % classic bandpass smoothing filter applied to entire image
         smooth = smoothImg(img, params.numDim, params.filterHi, params.filterLo,...
@@ -34,7 +34,6 @@ function smooth = smooth_image_and_subtract_background8(img,params,varargin)
             eliminateBackgroundSpots,backgroundID,paddingSize);
     end 
 end
-
 
 function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
     eliminateBackgroundSpots,backgroundID,paddingSize)
