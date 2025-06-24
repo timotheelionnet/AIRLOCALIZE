@@ -88,9 +88,9 @@ function params = get_image_file_location(params)
     end
     params.saveDirName = sourceDir;
     
-    % if adaptive mode, collect the name of the file or directory containing
+    % if adaptive threshold mode, collect the name of the file or directory containing
     % the mask images
-    if params.adaptive
+    if strcmp(params.threshUnits,'adaptive')
         if ismember(params.fileProcessingMode,{'singleFile','singleFileMovie'})
             disp('picking input mask file...');
             [fname,maskDir,fidx] = uigetfile('*.tiff;*.TIFF;*.TIF;*.tif;*.stk;*.lsm',...

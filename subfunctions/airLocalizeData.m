@@ -66,7 +66,7 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                     fl = getList(params.imgFileName,params.imgRecursive,...
                         caseSensitive,params.imgInclusionString,params.imgExclusionString);
                     
-                    if params.adaptive
+                    if strcmp(params.threshUnits,'adaptive')
                         flm = getList(params.maskFileName,params.maskRecursive,...
                             caseSensitive,params.maskInclusionString,params.maskExclusionString);
                         fileNamesOnly = 0; % match full paths
@@ -88,7 +88,7 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                 else
                     fl = {params.imgFileName};
                 end
-                if params.adaptive
+                if strcmp(params.threshUnits,'adaptive')
                     if ~exist(params.maskFileName,'file')
                         obj.setMaskFileList({});
                         disp(['Could not find data file ',params.maskFileName]);
@@ -195,8 +195,15 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                         obj.curMaskFile = obj.maskFileList{idx};
                     end
                 else
-                    if ~strcmp(obj.curMaskFile,obj.maskFileList{idx})
-                        obj.curMaskFile = obj.maskFileList{idx};
+                    if idx <= numel(obj.maskFileList)
+                        if ~strcmp(obj.curMaskFile,obj.maskFileList{idx})
+                            obj.curMaskFile = obj.maskFileList{idx};
+                        end
+                    else
+                        if numel(obj.maskFileList) >=1
+                            disp(['Warning: Could not find mask file for ',obj.imgFileList{idx}]);
+                        end
+                        obj.curMaskFile = [];
                     end
                 end
             end

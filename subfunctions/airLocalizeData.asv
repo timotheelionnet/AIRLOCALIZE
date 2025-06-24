@@ -66,7 +66,7 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                     fl = getList(params.imgFileName,params.imgRecursive,...
                         caseSensitive,params.imgInclusionString,params.imgExclusionString);
                     
-                    if params.adaptive
+                    if strcparams.adaptive
                         flm = getList(params.maskFileName,params.maskRecursive,...
                             caseSensitive,params.maskInclusionString,params.maskExclusionString);
                         fileNamesOnly = 0; % match full paths
@@ -195,8 +195,15 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                         obj.curMaskFile = obj.maskFileList{idx};
                     end
                 else
-                    if ~strcmp(obj.curMaskFile,obj.maskFileList{idx})
-                        obj.curMaskFile = obj.maskFileList{idx};
+                    if idx <= numel(obj.maskFileList)
+                        if ~strcmp(obj.curMaskFile,obj.maskFileList{idx})
+                            obj.curMaskFile = obj.maskFileList{idx};
+                        end
+                    else
+                        if numel(obj.maskFileList) >=1
+                            disp(['Warning: Could not find mask file for ',obj.imgFileList{idx}]);
+                        end
+                        obj.curMaskFile = [];
                     end
                 end
             end
@@ -344,23 +351,26 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
         end
 
         function obj = retrieveMask(obj,overwrite)
+            % load mask and check compatibility with image
             if obj.fileIdx < 0 || obj.fileIdx > numel(obj.maskFileList)
                 obj.mask = [];
                 return
             else
                 if ~obj.isFileIndexMaskLoaded(obj.fileIdx) || overwrite
                     [loadedMask,nSlices] = timtiffread(obj.maskFileList{obj.fileIdx});
-                    
+                    % make sure that the loaded image is up to date.
                     if ~obj.isFileIndexImgLoaded(obj.fileIdx)
                         obj.retrieveImg(1);
                     end
                     % if image is correctly loaded, we check dimensionality
-                    % compatibility between image and mask 
+                    % compatibility between the image and the mask 
                     if obj.isFileIndexImgLoaded(obj.fileIdx)
                         if obj.isMovie
                             if nSlices == 1 
                                 if obj.nFrames > 1
                                     obj.mask = repmat(loadedMask,1,1,obj.nFrames);
+                                else
+                                    obj.mask = loadedMask;
                                 end
                             elseif nSlices == obj.nFrames
                                 obj.mask = loadedMask;
@@ -383,10 +393,10 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                                     obj.mask = [];
                                 end
                             elseif ndims(obj.img) == 3 
-                                if nSlices == 1
-                                    obj.mask = repmat(loadedMask,1,1,obj.nFrames);
-                                elseif nSlices == size(obj.img,3)
+                                if nSlices == size(obj.img,3)
                                     obj.mask = loadedMask;
+                                elseif nSlices == 1 
+                                    obj.mask = repmat(loadedMask,1,1,size(obj.img,3));    
                                 else
                                     disp(['Mask ',obj.curMaskFile,...
                                         'has a different number of slices ',...
@@ -421,17 +431,20 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                     if ~obj.isFileIndexImgLoaded(obj.fileIdx) || overwrite
                         obj.retrieveImg(overwrite);
                     end
-                    if ~obj.isFileIndexMaskLoaded(obj.fileIdx) || overwrite
-                        obj.retrieveMask(overwrite);
-                    end
-                    if obj.isFileIndexMaskLoaded(obj.fileIdx)
-                        obj.smooth = smooth_image_and_subtract_background8(...
-                            obj.img,params,'mask',obj.mask);
-                    else
-                        if strcmp(params.threshUnits,'adaptive')
-                            disp(['Warning: mask image not loaded, cannot use it to smooth ',...
+
+                    if strcmp(params.threshUnits,'adaptive')
+                        if ~obj.isFileIndexMaskLoaded(obj.fileIdx) || overwrite
+                            obj.retrieveMask(overwrite);
+                        end
+                        if obj.isFileIndexMaskLoaded(obj.fileIdx)
+                            obj.smooth = smooth_image_and_subtract_background8(...
+                                obj.img,params,'mask',obj.mask);
+                        else
+                            disp(['Warning: mask image ', obj.curMaskFile,...
+                                'not loaded, cannot use it to smooth ',...
                                 obj.curImgFile]);
                         end
+                    else
                         obj.smooth = smooth_image_and_subtract_background8(...
                             obj.img,params);
                     end

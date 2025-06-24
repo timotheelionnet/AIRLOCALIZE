@@ -41,6 +41,7 @@ setappdata(fh,'yfreeze',yfreeze);
 thresh = struct();
 thresh.level = params.threshLevel;
 thresh.units = params.threshUnits;
+setappdata(fh,'defaultBackgroundColor','k');
 
 if strcmp(thresh.units,'legacySD')
     thresh.sd = std(alData.smooth(:,:,1),0,'all'); % using first frame to compute sd
@@ -70,6 +71,7 @@ set(handles.hzplot_range,'Callback',{@change_local_range,alData,fh});
 set(handles.hoverlay,'Callback',{@toggle_overlay,fh,alData});
 set(handles.hthresh_level,'Callback',{@update_threshold,fh,alData});
 set(handles.hthresh_units,'SelectionChangeFcn',{@update_threshold,fh,alData});
+set(fh,'WindowKeyPressFcn',{@moveCursorWithArrows,alData,fh});
 
 set(fh,'SelectionType','alt');
 set(fh,'CurrentAxes',handles.ha);
@@ -89,6 +91,106 @@ drawnow;
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%% Callback functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function moveCursorWithArrows(src,eventData,alData,fh)
+    % list of keys that when pressed, map to actions
+    keyList = {'uparrow','downarrow','leftarrow','rightarrow','h'};
+    charList = {'<', ',','>', '.'};
+    charKeyMap = {'comma','comma','period','period'};
+    if ~ismember(eventData.Key,keyList) ...
+            && ~ismember(eventData.Character,charList)
+        return
+    else
+        if sum(ismember(keyList,eventData.Key)) == 1
+            curKey = keyList{ismember(keyList,eventData.Key)};
+        else
+            curKey = charKeyMap{ismember(charList,eventData.Character)};
+        end
+    end
+
+    handles = guihandles(fh);
+    % key 'h' is the shortcut to toggle the overlay
+    if strcmp(curKey,'h')
+        set(handles.hoverlay,'Value', 1 - get(handles.hoverlay,'Value'));
+        toggle_overlay([],[],fh,alData);
+        return
+    end
+    
+    if ndims(alData.img)==3
+        [nx, ny, nz] = size(alData.img);
+    else
+        [nx, ny] = size(alData.img);
+    end
+
+    val = get(handles.hstate,'Value');
+    if val == 2
+        % in snap mode, move the z,y with arrows for fine positioning of
+        % the cursor (useful for centering on the spots for gaussian fits)
+        % move z plane with < and >
+        xfreeze = getappdata(fh,'xfreeze');
+        yfreeze = getappdata(fh,'yfreeze');
+        z = str2double(get(handles.hzpos,'String'));
+        z = round(z);
+        switch curKey
+            case 'uparrow'
+                xfreeze = xfreeze-1;
+            case 'downarrow'
+                xfreeze = xfreeze+1;
+            case 'leftarrow'
+                yfreeze = yfreeze-1;
+            case 'rightarrow'
+                yfreeze = yfreeze+1;
+            case {'comma'}
+                z = z - 1;
+            case {'period'}  
+                z = z + 1;
+        end
+
+        % enforce that the new cursor position remains within bounds
+        xfreeze = max(min(xfreeze,nx),1);
+        yfreeze = max(min(yfreeze,ny),1);
+        if ndims(alData.img)==3
+            z = max(min(z,nz),1);
+            set(handles.zslider,'Value',z);
+            set(handles.hzpos,'String',num2str(z));
+            slider_change([],[],alData,fh);
+        else 
+            z = 1;
+        end
+        
+        % update the figure data with the new cursor position
+        setappdata(fh,'xfreeze',xfreeze);
+        setappdata(fh,'yfreeze',yfreeze);
+        set(handles.hxpos,'String',num2str(xfreeze));
+        set(handles.hypos,'String',num2str(yfreeze));
+        Int = alData.img(xfreeze,yfreeze,z);
+        set(handles.hIval,'String',num2str(Int));
+
+        plot_local_data_two_channels(xfreeze,yfreeze,z,fh,alData);
+    else
+        % in grab mode, move the z-slider if the image is 3D
+        if ndims(alData.img)==3
+            z = str2double(get(handles.hzpos,'String'));
+            z = round(z);
+            switch curKey
+                case {'leftarrow','comma'}
+                    if z > 1
+                        z = z-1;
+                        set(handles.zslider,'Value',z);
+                        set(handles.hzpos,'String',num2str(z));
+                        slider_change([],[],alData,fh);
+                    end
+                case {'rightarrow','period'}
+                    if z<nz
+                        z = z+1;
+                        set(handles.zslider,'Value',z);
+                        set(handles.hzpos,'String',num2str(z));
+                        slider_change([],[],alData,fh);
+                    end
+            end
+        end
+    end
+end
+
 function update_threshold(src,eventdata,fh,alData)
     handles = guihandles(fh);
     
@@ -102,6 +204,8 @@ function update_threshold(src,eventdata,fh,alData)
         thresh.units = 'absolute';
     elseif strcmp(str_units,'SD') 
         thresh.units = 'SD';
+    elseif strcmp(str_units,'adaptive') 
+        thresh.units = 'adaptive';
     elseif strcmp(str_units,'legacySD') 
         thresh.units = 'legacySD';
     end
@@ -162,7 +266,10 @@ function nVox = computeNumberOfVoxelsAboveThreshold(thresh,alData)
                 .* repmat(std(alData.smooth,0,[1,2]),...
                 size(alData.smooth,1),size(alData.smooth,2),1);
         end
-    elseif strcmp(thresh.units,'absolute')
+    elseif strcmp(thresh.units,'absolute') || strcmp(thresh.units,'adaptive')
+        % note that in adaptive mode the smoothed image is pre-normalized
+        % within individual ROIs so we are just applying the same threshold
+        % across the board
         threshInt = thresh.level;
     end
     
@@ -180,9 +287,9 @@ function toggle_overlay(src,eventdata,fh,alData)
     %switching the state of the button
     is_overlay_on = 1 - get(handles.hoverlay,'Value');
     if is_overlay_on == 1 
-        set(handles.hoverlay,'String','hide overlay');
+        set(handles.hoverlay,'String','Hide Overlay (shortcut:h)');
     else 
-        set(handles.hoverlay,'String','show overlay');
+        set(handles.hoverlay,'String','Show Overlay (shortcut:h)');
     end
     
     %replotting the zoom window
@@ -190,7 +297,8 @@ function toggle_overlay(src,eventdata,fh,alData)
     
     val = get(handles.hstate,'Value');  %this is the snap/grab mode for the local data panel
     if val == 1                 %if grab mode is activated, I replot the zoom data at some arbitrary location
-        plot_zoom_two_channels(1,ny,z,zoomwidth,alData,fh);
+        %plot_zoom_two_channels(1,ny,z,zoomwidth,alData,fh);
+        viewlocaldata([],[],alData,fh);
           
     else                %if snap mode is activated, I plot the local data at the same location
         plot_zoom_two_channels(...
@@ -208,7 +316,7 @@ end
 function plot_current_z_stack_two_channels(fh,alData,z)
 
 thresh = getappdata(fh,'thresh');
-if strcmp(thresh.units,'absolute')
+if strcmp(thresh.units,'absolute') || strcmp(thresh.units,'adaptive')
     threshInt = thresh.level;
 elseif strcmp(thresh.units,'SD') || strcmp(thresh.units,'legacySD')
     threshInt = thresh.level*thresh.sd;
@@ -268,6 +376,8 @@ ha = handles.ha;
 imagesc(ha,curSlice); 
 xlim(ha,[1,max(nx,ny)]);
 ylim(ha,[1,max(nx,ny)]);
+defaultBackgroundColor = getappdata(fh,'defaultBackgroundColor');
+set(ha,'Color',defaultBackgroundColor);
 set(ha,'Tag','ha');
     
 clear('cur_slice','nx','ny','nz','Imin','Imax','newXLim','newYLim','stack1');
@@ -281,7 +391,7 @@ function plot_zoom_two_channels(x,y,z,width,alData,fh)
     zoomh = handles.zoomh;
     
     thresh = getappdata(fh,'thresh');
-    if strcmp(thresh.units,'absolute')
+    if strcmp(thresh.units,'absolute') || strcmp(thresh.units,'adaptive')
         threshInt = thresh.level;
     elseif strcmp(thresh.units,'SD') || strcmp(thresh.units,'legacySD')
         threshInt = thresh.level*thresh.sd;
@@ -634,9 +744,9 @@ end
 
 function viewlocaldata(src,eventdata,alData,fh)
     %if checkIfCallBackIsTooFrequent(src,t,minT) || isMultipleCall
-     if isMultipleCall
-         return
-     end
+    if isMultipleCall
+        return
+    end
     nx = getappdata(fh,'nx');
     ny = getappdata(fh,'ny');
     
@@ -870,9 +980,9 @@ startzoomwidth = num2str(50);
 %% %%%%%%%%%%%%%%%%%%%%%%% main figure, plots and title %%%%%%%%%%%%%%%%%%%%%%%  
 
 %set(fh,'Toolbar','figure');
-set(fh,'Name',alData.curFile);              
-axes('Parent',fh,'Units','characters','Position',...
-    [10,6.15,102.4,39.4],'Tag','ha');     %main figure
+set(fh,'Name',alData.curImgFile);              
+axes('Parent',fh,'Units','characters','Color', 'k',...
+    'Position',[10,6.15,102.4,39.4],'Tag','ha');     %main figure
         
 axes('Parent',fh,'Units','characters',...
     'Position',[120 45.4 66 7.7],'Tag','xh'); 
@@ -972,13 +1082,17 @@ hth = uibuttongroup('parent',hthresh,'Units','characters',...
     'Title','Units',...
     'Position',[0.5 0.2 20 5.5]);
 
-habs = uicontrol('parent',hth,'Style','Radio','Units','characters',...
+hAbs = uicontrol('parent',hth,'Style','Radio','Units','characters',...
         'String','Absolute',...
         'Tag','absolute',...
-        'Position',[1 3 18 1.5]); 
+        'Position',[1 4.25 18 1.5]); 
 hSD = uicontrol('parent',hth,'Style','Radio','Units','characters',...
         'String','Intensity std',...
         'Tag','SD',...
+        'Position',[1 3 18 1.5]);
+hAdaptive = uicontrol('parent',hth,'Style','Radio','Units','characters',...
+        'String','Adaptive from ROIs',...
+        'Tag','adaptive',...
         'Position',[1 1.75 18 1.5]);
 hLegacySD = uicontrol('parent',hth,'Style','Radio','Units','characters',...
         'String','Intensity std (Legacy)',...
@@ -989,8 +1103,10 @@ if strcmp(thresh.units,'SD')
     set(hth,'SelectedObject',hSD);
 elseif strcmp(thresh.units,'legacySD')
     set(hth,'SelectedObject',hLegacySD);
+elseif strcmp(thresh.units,'adaptive')
+    set(hth,'SelectedObject',hAdaptive);
 else
-    set(hth,'SelectedObject',habs);
+    set(hth,'SelectedObject',hAbs);
 end
 
 
@@ -1172,6 +1288,20 @@ if nd == 2
     set(u2,'visible','off');
 end
 
+if nd == 2 || 3
+    uicontrol(fh,'Style','text','Units','characters',...
+        'String',['In grab mode, use arrows for fine (x,y) motion,',...
+        'and the < or > keys for fine z motion'],...
+        'HorizontalAlignment','center',...
+        'Position',[52 0.4 52.4 1.2]);
+else
+    
+    uicontrol(fh,'Style','text','Units','characters',...
+        'String','In grab mode, use arrows for fine (x,y) motion',...
+        'HorizontalAlignment','center',...
+        'Position',[52 0.4 52.4 1.2]);
+end
+
 %% action button
 uicontrol(fh,'Style','pushbutton',...
                     'Tag','hclose',...
@@ -1184,8 +1314,8 @@ uicontrol(fh,'Style','togglebutton',...
                     'Tag','hoverlay',...
                     'Units','characters',...
                     'Value',0,...
-                    'String','Hide Overlay',...
-                    'Position',[50 0.2 22 1.5]);                
+                    'String','Hide Overlay (shortcut: h)',...
+                    'Position',[10 0.2 42 1.5]);                
                 
                              
 clear('nz','strXpos','strYpos','strZpos',...

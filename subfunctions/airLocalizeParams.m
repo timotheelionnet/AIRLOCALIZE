@@ -7,7 +7,7 @@ classdef airLocalizeParams < handle & matlab.mixin.Copyable
         % path to image file name / folder name for batch analysis
         imgFileName;
 
-        % path to mask file name / folder name - only used if 'adaptive' mode is
+        % path to mask file name / folder name - only used if 'adaptive' threshold is
         % selected
         maskFileName;
 
@@ -29,23 +29,17 @@ classdef airLocalizeParams < handle & matlab.mixin.Copyable
         % (batch mode only)
         imgRecursive;
 
-        % set to 1 to use an adaptive threshold - it requires for each
-        % data image or stack a matching image or stack of masks; the
-        % threshold is then scaled to the std of the intensity within each
-        % mask object.
-        adaptive;
-
-        % (adaptive mode only) comma-separated string containing patterns 
+        % (adaptive threshold mode only) comma-separated string containing patterns 
         % that need to be present in the full mask file path for it to 
         % be analyzed
         maskInclusionString;
 
-        % (adaptive mode only) comma-separated string containing patterns 
+        % (adaptive threshold mode only) comma-separated string containing patterns 
         % that if present in the full mask file path, will exclude the file
         % from analysis
         maskExclusionString;
 
-        % (adaptive & batch mode only) set to 1 to explore subdirectories 
+        % (adaptive threshold & batch mode only) set to 1 to explore subdirectories 
         % of the parent mask folder 
         maskRecursive;
 
@@ -961,13 +955,6 @@ classdef airLocalizeParams < handle & matlab.mixin.Copyable
             p.imgRecursive = {0,1};
             n.imgRecursive = 0;
             section.imgRecursive = 'Files';
-
-            % set to 1 to use an adaptive threshold in ROIs
-            d.adaptive = 0;
-            t.adaptive = {'numeric'};
-            p.adaptive = {0,1};
-            n.adaptive = 0;
-            section.adaptive = 'Files';
 
             % comma-separated string containing patterns that need to be present in the
             % mask full file path for it to be analyzed

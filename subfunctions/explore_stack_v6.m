@@ -2,7 +2,7 @@ function varargout = explore_stack_v6(params,alData)
 
 
 %% main figure
-fh = figure('name',alData.curFile,...
+fh = figure('name',alData.curImgFile,...
               'Units','characters',...
               'MenuBar','none',...
               'Toolbar','none',...
@@ -17,7 +17,7 @@ else
     [nx, ny] = size(alData.img);
     nz = 1;
 end
-setappdata(fh,'stackname',alData.curFile);
+setappdata(fh,'stackname',alData.curImgFile);
 setappdata(fh,'nx',nx);
 setappdata(fh,'ny',ny);
 setappdata(fh,'nz',nz);
@@ -26,6 +26,7 @@ yfreeze = round(ny/2);
 setappdata(fh,'xfreeze',xfreeze);
 setappdata(fh,'yfreeze',yfreeze);
 setappdata(fh,'fitres',[0,0,0,0,0,0,0]);
+setappdata(fh,'defaultBackgroundColor','k');
 
 fh = set_figure_and_panel_for_explore_stack(fh,alData);
 handles = guihandles(fh);
@@ -46,6 +47,7 @@ set(handles.hrecord,'Callback',{@record_fit_results,alData,fh});
 set(handles.hxplot_range,'Callback',{@change_local_range,alData,fh});
 set(handles.hyplot_range,'Callback',{@change_local_range,alData,fh});
 set(handles.hzplot_range,'Callback',{@change_local_range,alData,fh});
+set(fh,'WindowKeyPressFcn',{@moveCursorWithArrows,alData,fh});
 
 set(fh,'SelectionType','alt');
 set(fh,'CurrentAxes',handles.ha);
@@ -65,6 +67,99 @@ clear('fh','ha','handles');
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%% Callback functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function moveCursorWithArrows(src,eventData,alData,fh)
+    % list of keys that when pressed, map to actions
+    keyList = {'uparrow','downarrow','leftarrow','rightarrow'};
+    charList = {'<', ',','>', '.'};
+    charKeyMap = {'comma','comma','period','period'};
+    if ~ismember(eventData.Key,keyList) ...
+            && ~ismember(eventData.Character,charList)
+        return
+    else
+        if sum(ismember(keyList,eventData.Key)) == 1
+            curKey = keyList{ismember(keyList,eventData.Key)};
+        else
+            curKey = charKeyMap{ismember(charList,eventData.Character)};
+        end
+    end
+
+    handles = guihandles(fh);
+    if ndims(alData.img)==3
+        [nx, ny, nz] = size(alData.img);
+    else
+        [nx, ny] = size(alData.img);
+    end
+
+    val = get(handles.hstate,'Value');
+    if val == 2
+        % in snap mode, move the z,y with arrows for fine positioning of
+        % the cursor (useful for centering on the spots for gaussian fits)
+        % move z plane with < and >
+        xfreeze = getappdata(fh,'xfreeze');
+        yfreeze = getappdata(fh,'yfreeze');
+        z = str2double(get(handles.hzpos,'String'));
+        z = round(z);
+        switch curKey
+            case 'uparrow'
+                xfreeze = xfreeze-1;
+            case 'downarrow'
+                xfreeze = xfreeze+1;
+            case 'leftarrow'
+                yfreeze = yfreeze-1;
+            case 'rightarrow'
+                yfreeze = yfreeze+1;
+            case {'comma'}
+                z = z - 1;
+            case {'period'}  
+                z = z + 1;
+        end
+
+        % enforce that the new cursor position remains within bounds
+        xfreeze = max(min(xfreeze,nx),1);
+        yfreeze = max(min(yfreeze,ny),1);
+        if ndims(alData.img)==3
+            z = max(min(z,nz),1);
+            set(handles.zslider,'Value',z);
+            set(handles.hzpos,'String',num2str(z));
+            slider_change([],[],alData,fh);
+        else 
+            z = 1;
+        end
+        
+        % update the figure data with the new cursor position
+        setappdata(fh,'xfreeze',xfreeze);
+        setappdata(fh,'yfreeze',yfreeze);
+        set(handles.hxpos,'String',num2str(xfreeze));
+        set(handles.hypos,'String',num2str(yfreeze));
+        Int = alData.img(xfreeze,yfreeze,z);
+        set(handles.hIval,'String',num2str(Int));
+
+        plot_local_data_single_channel(xfreeze,yfreeze,z,fh,alData);
+    else
+        % in grab mode, move the z-slider if the image is 3D
+        if ndims(alData.img)==3
+            z = str2double(get(handles.hzpos,'String'));
+            z = round(z);
+            switch curKey
+                case {'leftarrow','comma'}
+                    if z > 1
+                        z = z-1;
+                        set(handles.zslider,'Value',z);
+                        set(handles.hzpos,'String',num2str(z));
+                        slider_change([],[],alData,fh);
+                    end
+                case {'rightarrow','period'}
+                    if z<nz
+                        z = z+1;
+                        set(handles.zslider,'Value',z);
+                        set(handles.hzpos,'String',num2str(z));
+                        slider_change([],[],alData,fh);
+                    end
+            end
+        end
+    end
+end
+
 function plot_current_z_stack_single_channel(fh,alData,z)
 
 handles = guihandles(fh);    
@@ -102,6 +197,8 @@ handles = guihandles(fh);
     colormap(gray);
     xlim([1,max(nx,ny)]);
     ylim([1,max(nx,ny)]);
+    defaultBackgroundColor = getappdata(fh,'defaultBackgroundColor');
+    set(ha,'Color',defaultBackgroundColor);
     set(ha,'Tag','ha');
 
 clear('cur_slice','nx','ny','nz','Imin','Imax','newXLim','newYLim','stack1');
@@ -498,7 +595,6 @@ function viewlocaldata(src,eventdata,alData,fh)
         %I update the current display of the pointer info
         set(handles.hxpos,'String',num2str(x));
         set(handles.hypos,'String',num2str(y));
-        
         Int = alData.img(x,y,z);
         set(handles.hIval,'String',num2str(Int));
         
@@ -919,7 +1015,8 @@ startzoomwidth = num2str(50);
 %set(fh,'Toolbar','figure');
 
 set(fh,'Name',getappdata(fh,'stackname'));              
-axes('Parent',fh,'Units','characters','Position',[10,6.15,102.4,39.4],'Tag','ha');     %main figure
+axes('Parent',fh,'Units','characters','Color', 'k',...
+    'Position',[10,6.15,102.4,39.4],'Tag','ha');     %main figure
         
 axes('Parent',fh,'Units','characters','Position',[120 45.4 66 7.7],'Tag','xh'); 
 axes('Parent',fh,'Units','characters','Position',[120 33.8 66 7.7],'Tag','yh'); 
@@ -1016,7 +1113,7 @@ end
 uicontrol('Units','characters',...
                 'Style','text','String','integrated Intensity',...
                 'HorizontalAlignment','right',...
-                'Position',[112,11.5,18,1.2]);
+                'Position',[113,11.5,17,1.2]);
 uicontrol('Units','characters',...
                 'Tag','hI0',...
                 'Style','text','String','undefined',...
@@ -1024,7 +1121,7 @@ uicontrol('Units','characters',...
 uicontrol('Units','characters',...
                 'Style','text','String','background',...
                 'HorizontalAlignment','right',...
-                'Position',[112,10.4,18,1.2]);
+                'Position',[113,10.4,17,1.2]);
 uicontrol('Units','characters',...
                 'Tag','hbg0',...
                 'Style','text','String','undefined',...
@@ -1032,7 +1129,7 @@ uicontrol('Units','characters',...
 uicontrol('Units','characters',...
                 'Style','text','String','s_xy',...
                 'HorizontalAlignment','right',...
-                'Position',[112,8.8,18,1.2]);
+                'Position',[113,8.8,17,1.2]);
 uicontrol('Units','characters',...
                  'Tag','hsxy0',...
                 'Style','text','String','undefined',...
@@ -1040,7 +1137,7 @@ uicontrol('Units','characters',...
 uiSz = uicontrol('Units','characters',...
                 'Style','text','String','s_z',...
                 'HorizontalAlignment','right',...
-                'Position',[112,7.7,18,1.2]);
+                'Position',[113,7.7,17,1.2]);
 uihsz0 = uicontrol('Units','characters',...
                 'Tag','hsz0',...
                 'Style','text','String','undefined',...
@@ -1228,6 +1325,19 @@ uiZslider = uicontrol(fh,'Style','slider',...
                 'Position',[10 2.3 102.4 1.2]);
 if nd ==2
     set(uiZslider,'visible','off');
+end
+
+if nd ==2
+    uicontrol(fh,'Style','text','Units','characters',...
+        'String','In grab mode, use arrows for fine (x,y) motion',...
+        'HorizontalAlignment','center',...
+        'Position',[10 0.8 102.4 1.2]);
+else
+    uicontrol(fh,'Style','text','Units','characters',...
+        'String',['In grab mode, use arrows for fine (x,y) motion,',...
+        'and the < or > keys for fine z motion'],...
+        'HorizontalAlignment','center',...
+        'Position',[10 0.8 102.4 1.2]);
 end
 
 uicontrol(fh,'Style','pushbutton',...

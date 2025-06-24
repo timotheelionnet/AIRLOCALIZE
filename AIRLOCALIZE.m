@@ -128,8 +128,8 @@ for i=1:numel(alData.imgFileList)
         continue;
     end
 
-    % retrieve mask if in adaptive mode
-    if params.adaptive
+    % retrieve mask if in adaptive threshold mode
+    if strcmp(params.threshUnits,'adaptive')
         alData.retrieveMask(overwrite);
     end
 
@@ -151,50 +151,52 @@ for i=1:numel(alData.imgFileList)
         
         % update current frame
         alData.setCurFrame(j);
+
+        % predetection of local maxima
+        spotCandidates = find_isolated_maxima_clean3(...
+            alData,params,verbose);   
+
+        % detection/quantification
+        [tmpLoc,locVars] = run_gaussian_fit_on_all_spots_in_image3(...
+            spotCandidates,alData,params);
+
+        % add mask IDs for adaptive mode
+        [tmpLoc,locVars] = assignMaskIDsToSpots(tmpLoc,locVars,alData,params);
         
-        [tmpLoc,tmpLocVars] = localizeImgPairAdaptive(...
-                alData.img,alData.mask,'locParams',params);
-        if isempty(tmpLocVars)
-            locVars = tmpLocVars;
-        end
-
-        % add mask IDs to each spot if adaptive mode was selected
-        if strcmp(params.threshUnits,'adaptive')
-            tmpRoiID = [];
-            if ismember(ndims(alData.mask),[2,3])
-                if ismatrix(alData.mask)
-                    idx = sub2ind(size(alData.mask), ...
-                        ceil(tmpLoc(:,1)),ceil(tmpLoc(:,2)) );
-                elseif ndims(alData.mask) == 3
-                    idx = sub2ind(size(alData.mask), ...
-                        ceil(tmpLoc(:,1)),ceil(tmpLoc(:,2)),ceil(tmpLoc(:,3)) );
-                end
-                tmpRoiID = alData.mask(idx);
-            end 
-            if ~isempty(tmpRoiID)
-                tmpLoc = [tmpLoc(:,end-1),tmpRoiID,tmpLoc(:,end)];
-                tmpLocVars = [tmpLocVars(1:end-1),'ROI_ID',tmpLocVars(end)];
-            end
-        end
-
-        % if ~params.adaptive
-        %     % predetection of local maxima
-        %     spotCandidates = find_isolated_maxima_clean3(...
-        %         alData,params,verbose);   
-        % 
-        %     % detection/quantification
-        %     [tmpLoc,locVars] = run_gaussian_fit_on_all_spots_in_image3(...
-        %     spotCandidates,alData,params);
-        % else
-        %     [tmpLoc,locVars] = localizeImgPairAdaptive(...
+        loc = [loc; tmpLoc];
+        
+        % [tmpLoc,tmpLocVars] = localizeImgPairAdaptive(...
         %         alData.img,alData.mask,'locParams',params);
+        % if isempty(tmpLocVars)
+        %     locVars = tmpLocVars;
         % end
-        if isequal(locVars,tmpLocVars)
-            loc = [loc; tmpLoc];
-        else
-            loc = concatenateRowsBasedOnStrings(...
-                loc,tmpLoc,locVars,tmpLocVars);
-        end
+        % 
+        % % add mask IDs to each spot if adaptive mode was selected
+        % if strcmp(params.threshUnits,'adaptive')
+        %     tmpRoiID = [];
+        %     if ismember(ndims(alData.mask),[2,3])
+        %         if ismatrix(alData.mask)
+        %             idx = sub2ind(size(alData.mask), ...
+        %                 ceil(tmpLoc(:,1)),ceil(tmpLoc(:,2)) );
+        %         elseif ndims(alData.mask) == 3
+        %             idx = sub2ind(size(alData.mask), ...
+        %                 ceil(tmpLoc(:,1)),ceil(tmpLoc(:,2)),ceil(tmpLoc(:,3)) );
+        %         end
+        %         tmpRoiID = alData.mask(idx);
+        %     end 
+        %     if ~isempty(tmpRoiID)
+        %         tmpLoc = [tmpLoc(:,end-1),...
+        %             repmat(tmpRoiID,size(tmpLoc,1),1),tmpLoc(:,end)];
+        %         tmpLocVars = [tmpLocVars(1:end-1),'ROI_ID',tmpLocVars(end)];
+        %     end
+        % end
+        % 
+        % if isequal(locVars,tmpLocVars)
+        %     loc = [loc; tmpLoc];
+        % else
+        %     loc = concatenateRowsBasedOnStrings(...
+        %         loc,tmpLoc,locVars,tmpLocVars);
+        % end
     end
     
     % save spot coordinates and detection parameters to text file
@@ -227,6 +229,45 @@ function c = concatenateRowsBasedOnStrings(data1,data2,vars1,vars2)
     end
 
     c = [data1;tmpData2];
+end
+
+function [loc,locVars] = assignMaskIDsToSpots(loc,locVars,alData,params)
+    addDummyIDs = 0;
+    ignoreIDs = 1;
+    if strcmp(params.threshUnits,'adaptive') && ~isempty(alData.mask)
+         ignoreIDs = 0;
+    end
+
+    % pad ROI-ID column with zeros if addDummyIDs is selected
+    % this isnt in use but I'm leaving it here - if we want to set that
+    % up as default at some point, we'll just have to set addDummyIDs to 1.
+    if ignoreIDs && addDummyIDs 
+        loc = [loc,zeros(size(loc,1),1)];
+        locVars = [locVars,'ROI_ID'];
+        return
+    end
+    
+    % collect the ID of the ROI each spot belongs too.
+    if ndims(alData.mask) == 3
+        [nx,ny,nz] = size(alData.mask);
+        locPix = [  max(min(ceil(loc(:,1)),nx),1),...
+                    max(min(ceil(loc(:,2)),ny),1),...
+                    max(min(ceil(loc(:,3)),nz),1)];
+        roiIDs = alData.mask(sub2ind(size(alData.mask),...
+            locPix(:,1),locPix(:,2),locPix(:,3)));
+    elseif ismatrix(alData.mask)
+        [nx,ny] = size(alData.mask);
+        locPix = [  max(min(ceil(loc(:,1)),nx),1),...
+                    max(min(ceil(loc(:,2)),ny),1)];
+        roiIDs = alData.mask(sub2ind(size(alData.mask),...
+            locPix(:,1),locPix(:,2)));
+    end
+    
+    % add ROI_IDs as extra column to the loc array, and sort spots by
+    % ROI_ID
+    loc = [loc,roiIDs];
+    loc = sortrows(loc,size(loc,2),'ascend');
+    locVars = [locVars,'ROI_ID'];
 end
 
 

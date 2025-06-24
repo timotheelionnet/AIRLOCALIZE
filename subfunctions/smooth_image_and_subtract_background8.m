@@ -8,7 +8,7 @@ function smooth = smooth_image_and_subtract_background8(img,params,varargin)
             % Sigma
         % params.filterHi: hi frequency cutiff length in pixel units
         % params.psfSigma: lateral extension of the gaussian point spread function
-     
+    
     p = inputParser();
     addParameter(p,'mask',[]);
     addParameter(p,'eliminateBackgroundSpots',1);    
@@ -22,6 +22,7 @@ function smooth = smooth_image_and_subtract_background8(img,params,varargin)
     paddingSize = p.Results.paddingSize;
 
     if isempty(mask)
+        disp('smoothing image...'); 
         % classic bandpass smoothing filter applied to entire image
         smooth = smoothImg(img, params.numDim, params.filterHi, params.filterLo,...
             params.psfSigma(1));
@@ -29,6 +30,7 @@ function smooth = smooth_image_and_subtract_background8(img,params,varargin)
         % subtract the background mean
         smooth = smooth - mean(smooth(:));
     else
+        disp('smoothing image and normalizing intensity in masks...'); 
         smooth = smoothInMasks(img,mask,...
             params.filterHi, params.filterLo,params.psfSigma(1),...
             eliminateBackgroundSpots,backgroundID,paddingSize);

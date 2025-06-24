@@ -1,19 +1,18 @@
 [Files]
-imgFileName=/Users/lionnt01/Documents/GitHub/AIRLOCALIZE/examples/adaptive_examples/MFGTMP_250324110001_B02f00d1.TIFF
-maskFileName=/Users/lionnt01/Documents/GitHub/AIRLOCALIZE/examples/adaptive_examples
-saveDirName=/Users/lionnt01/Documents/GitHub/AIRLOCALIZE/examples/adaptive_examples
-fileProcessingMode=batch
+imgFileName=/Users/lionnt01/Documents/Github/AIRLOCALIZE/examples/adaptive_examples/MFGTMP_250324110001_B02f00d1.TIFF
+maskFileName=/Users/lionnt01/Documents/Github/AIRLOCALIZE/examples/adaptive_examples/MFGTMP_250324110001_B02f00d1_cp_masks.tif
+saveDirName=/Users/lionnt01/Documents/Github/AIRLOCALIZE/examples/adaptive_examples/
+fileProcessingMode=singleFile
 imgInclusionString=
-imgExclusionString=cp_masks,spots
+imgExclusionString=
 imgRecursive=0
-adaptive=1
-maskInclusionString=cp_masks
+maskInclusionString=
 maskExclusionString=
 maskRecursive=0
 
 [detectionSettings]
 psfSigma=1.3
-threshUnits=absolute
+threshUnits=adaptive
 threshLevel=6
 maxSpots=20000
 fitMethod=2DGaussianMask
