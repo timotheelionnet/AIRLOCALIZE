@@ -82,7 +82,7 @@ elseif nargin == 1
 end
 
 %% analyze file(s)
-
+startTime1 = tic;
 % create saving dir if necessary
 if ~isempty(params.saveDirName)
     if ~exist(params.saveDirName,'dir')
@@ -208,6 +208,7 @@ for i=1:numel(alData.imgFileList)
     end
     disp('  done analyzing file.');
 end
+elapsed1 = toc(startTime1)
 disp('done.');
 
 end
@@ -245,6 +246,8 @@ function [loc,locVars] = assignMaskIDsToSpots(loc,locVars,alData,params)
         loc = [loc,zeros(size(loc,1),1)];
         locVars = [locVars,'ROI_ID'];
         return
+    elseif ignoreIDs && ~addDummyIDs 
+        return
     end
     
     % collect the ID of the ROI each spot belongs too.
@@ -255,12 +258,16 @@ function [loc,locVars] = assignMaskIDsToSpots(loc,locVars,alData,params)
                     max(min(ceil(loc(:,3)),nz),1)];
         roiIDs = alData.mask(sub2ind(size(alData.mask),...
             locPix(:,1),locPix(:,2),locPix(:,3)));
-    elseif ismatrix(alData.mask)
+    elseif ismatrix(alData.mask) && ~isempty(alData.mask)
         [nx,ny] = size(alData.mask);
         locPix = [  max(min(ceil(loc(:,1)),nx),1),...
                     max(min(ceil(loc(:,2)),ny),1)];
         roiIDs = alData.mask(sub2ind(size(alData.mask),...
             locPix(:,1),locPix(:,2)));
+    else
+        loc = [loc,zeros(size(loc,1),1)];
+        locVars = [locVars,'ROI_ID'];
+        return
     end
     
     % add ROI_IDs as extra column to the loc array, and sort spots by

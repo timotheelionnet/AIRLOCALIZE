@@ -1,0 +1,108 @@
+% adaptive script
+% given an image with spots and and an image of the same size of masks, it
+% computes thresholds local to each ROI in the mask and detects spots in
+% each mask. 
+% (Spots outside of masks are tossed).
+
+% MAKE SURE THAT THE FOLLOWING FOLDERS ARE ON THE PATH:
+% AIRLOCALIZE/subfunctions
+% AIRLOCALIZE/subfunctions/iniconfig
+
+%% files paths for:
+% - the data to be localized (imgName)
+% - the masks used to generate locally relevant tresholds (maskName)
+imgName = '/Users/lionnt01/Documents/junk/3D_stack_example.tif';
+maskName = '/Users/lionnt01/Documents/junk/3D_stack_example_mask_lbl.tif';
+
+%% settings
+% key parameter: size of the psf in pixel units 
+% should be scalar for 2D image data / should be 2D for 3D z-stacks ([sigma_xy, sigma_z])
+psfSigma = [1.3,2];
+
+% key parameter: factor that will be multiplied to the std of the mask
+% (recommended: 6)
+threshFactor = 12;
+
+% options
+% if = 1, eliminates spots in the background region; set to 0 to keep (default: 1)
+eliminateBackgroundSpots = 1;
+
+% pixel value that marks the backgorund spots. If set to NaN, the region
+% with minimal pixel value will be eliminated (default: 0)
+backgroundID = 0;
+
+% size of the pixel padding around each mask in the cropped image (default:
+% 0)
+paddingSize = 0;
+
+% setup the data and parameters objects
+alData1m = airLocalizeData();
+params1m = airLocalizeParams();
+params1m.reset();
+params1m.threshUnits = 'adaptive';
+params1m.threshLevel = 12;
+
+img = timtiffread(imgName);
+mask = timtiffread(maskName);
+%%
+start0 = tic;
+smooth = smooth_image_and_subtract_background9(img,params1m,'mask',mask);
+t = toc(start0)
+%% 
+start2 = tic;
+smooth = smooth_image_and_subtract_background9(img,params1m);
+t = toc(start2)
+
+%%
+% Example dimensions
+nx = 5;
+ny = 4;
+nz = 3;
+
+% Given 2D linear indices (e.g., into nx-by-ny matrix)
+linIdx2D = [3; 7; 10];  % example indices
+
+% Convert to subscript indices (i,j)
+[i, j] = ind2sub([nx, ny], linIdx2D);
+
+% Expand to all k values
+k = reshape(1:nz, 1, 1, nz);  % [1 x 1 x nz]
+i = reshape(i, [], 1, 1);     % [N x 1 x 1]
+j = reshape(j, [], 1, 1);     % [N x 1 x 1]
+
+% Broadcast and get all (i,j,k)
+I = repmat(i, 1, 1, nz);  % [N x 1 x nz]
+J = repmat(j, 1, 1, nz);  % [N x 1 x nz]
+K = repmat(k, length(i), 1, 1);  % [N x 1 x nz]
+
+% Convert back to linear indices into [nx ny nz]
+linIdx3D = sub2ind([nx ny nz], I(:), J(:), K(:));
+
+%%
+% Example dimensions
+nx = 5;
+ny = 4;
+nz = 3;
+
+% Given 2D linear indices (e.g., into nx-by-ny matrix)
+linIdx2D = [3; 7; 10];  % example indices
+
+% Convert to subscript indices (i,j)
+[i, j] = ind2sub([nx, ny], linIdx2D);
+
+% Expand to all k values
+k = reshape(1:nz, 1, nz);  % [1 x 1 x nz]
+i = reshape(i, [], 1);     % [N x 1 x 1]
+j = reshape(j, [], 1);     % [N x 1 x 1]
+
+% Broadcast and get all (i,j,k)
+I = repmat(i, 1, nz);  % [N x 1 x nz]
+J = repmat(j, 1, nz);  % [N x 1 x nz]
+K = repmat(k, length(i), 1);  % [N x 1 x nz]
+
+% Convert back to linear indices into [nx ny nz]
+linIdx3D2 = sub2ind([nx ny nz], I(:), J(:), K(:));
+
+x = zeros(nx,ny,nz); x(linIdx3D2) = 1;
+
+

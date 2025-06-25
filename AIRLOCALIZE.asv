@@ -82,7 +82,7 @@ elseif nargin == 1
 end
 
 %% analyze file(s)
-
+startTime1 = tic;
 % create saving dir if necessary
 if ~isempty(params.saveDirName)
     if ~exist(params.saveDirName,'dir')
@@ -208,6 +208,7 @@ for i=1:numel(alData.imgFileList)
     end
     disp('  done analyzing file.');
 end
+elapsed1 = toc(startTime1)
 disp('done.');
 
 end
@@ -238,24 +239,36 @@ function [loc,locVars] = assignMaskIDsToSpots(loc,locVars,alData,params)
          ignoreIDs = 0;
     end
 
-    if ignoreIDs && addDummyIDs % pad ROI-ID column with zeros if addDummyIDs is selected
+    % pad ROI-ID column with zeros if addDummyIDs is selected
+    % this isnt in use but I'm leaving it here - if we want to set that
+    % up as default at some point, we'll just have to set addDummyIDs to 1.
+    if ignoreIDs && addDummyIDs 
         loc = [loc,zeros(size(loc,1),1)];
         locVars = [locVars,'ROI_ID'];
         return
     end
     
+    % collect the ID of the ROI each spot belongs too.
     if ndims(alData.mask) == 3
         [nx,ny,nz] = size(alData.mask);
-        locPix = [  max(min(loc(:,1),nx),1),...
-                    max(min(loc(:,2),ny),1),...
-                    max(min(loc(:,3),nz),1)];
-        roiIDs = alData.mask(sub2ind(size(alData.mask),locPix()))
-    elseif ismatrix(alData.mask)
+        locPix = [  max(min(ceil(loc(:,1)),nx),1),...
+                    max(min(ceil(loc(:,2)),ny),1),...
+                    max(min(ceil(loc(:,3)),nz),1)];
+        roiIDs = alData.mask(sub2ind(size(alData.mask),...
+            locPix(:,1),locPix(:,2),locPix(:,3)));
+    elseif ismatrix(alData.mask) &&
         [nx,ny] = size(alData.mask);
-        locPix = [  max(min(loc(:,1),nx),1),...
-                    max(min(loc(:,2),ny),1)];
+        locPix = [  max(min(ceil(loc(:,1)),nx),1),...
+                    max(min(ceil(loc(:,2)),ny),1)];
+        roiIDs = alData.mask(sub2ind(size(alData.mask),...
+            locPix(:,1),locPix(:,2)));
     end
     
+    % add ROI_IDs as extra column to the loc array, and sort spots by
+    % ROI_ID
+    loc = [loc,roiIDs];
+    loc = sortrows(loc,size(loc,2),'ascend');
+    locVars = [locVars,'ROI_ID'];
 end
 
 

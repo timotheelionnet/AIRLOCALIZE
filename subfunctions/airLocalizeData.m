@@ -393,10 +393,8 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                                     obj.mask = [];
                                 end
                             elseif ndims(obj.img) == 3 
-                                if nSlices == size(obj.img,3)
+                                if nSlices == size(obj.img,3) || nSlices == 1
                                     obj.mask = loadedMask;
-                                elseif nSlices == 1 
-                                    obj.mask = repmat(loadedMask,1,1,size(obj.img,3));    
                                 else
                                     disp(['Mask ',obj.curMaskFile,...
                                         'has a different number of slices ',...
@@ -437,7 +435,7 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                             obj.retrieveMask(overwrite);
                         end
                         if obj.isFileIndexMaskLoaded(obj.fileIdx)
-                            obj.smooth = smooth_image_and_subtract_background8(...
+                            obj.smooth = smooth_image_and_subtract_background9(...
                                 obj.img,params,'mask',obj.mask);
                         else
                             disp(['Warning: mask image ', obj.curMaskFile,...
@@ -445,7 +443,7 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                                 obj.curImgFile]);
                         end
                     else
-                        obj.smooth = smooth_image_and_subtract_background8(...
+                        obj.smooth = smooth_image_and_subtract_background9(...
                             obj.img,params);
                     end
                 end

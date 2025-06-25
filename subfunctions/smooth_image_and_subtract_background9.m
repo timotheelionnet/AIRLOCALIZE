@@ -1,4 +1,4 @@
-function smooth = smooth_image_and_subtract_background8(img,params,varargin)
+function smooth = smooth_image_and_subtract_background9(img,params,varargin)
     % applies a bandpass filter to the image img
     % if image is a stack, each slice is 2D-filtered independently.
     
@@ -37,7 +37,6 @@ function smooth = smooth_image_and_subtract_background8(img,params,varargin)
         % of fluorescence intensities.
         % smooth is set to zero in the pixels forming the background of the
         % mask.
-      
     p = inputParser();
     addParameter(p,'mask',[]);
     addParameter(p,'eliminateBackgroundROIs',1);    
@@ -49,7 +48,7 @@ function smooth = smooth_image_and_subtract_background8(img,params,varargin)
     eliminateBackgroundROIs = p.Results.eliminateBackgroundROIs;
     backgroundID = p.Results.backgroundID;
     paddingSize = p.Results.paddingSize;
-
+    
     if isempty(mask)
         disp('smoothing image...'); 
         % classic bandpass smoothing filter applied to entire image
@@ -72,9 +71,6 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
     % replicate the mask in the third dim if it is two-dimensional and the
     % image is a stack.
     nd = ndims(img);
-    if nd == 3 && ismatrix(mask)
-        mask = repmat(mask,1,1,size(img,3));
-    end
     
     % collect list of masks IDs
     mList = collectMaskIds(mask,eliminateBackgroundROIs,backgroundID);
@@ -87,8 +83,22 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
     smooth = zeros(size(img));
     for i=1:nm
         % crop rectangle ROI around mask 
-        [croppedImg,dx,dy,dz] = cropImageBasedOnMask(img, mask, mList(i), paddingSize);
-        croppedMask = cropImageBasedOnMask(mask, mask, mList(i), paddingSize);
+        [croppedImg,dx,dy,dz] = cropImageBasedOnMask(...
+            img, mask, mList(i), paddingSize);
+        if nd == 3 
+            if ismatrix(mask)
+                croppedMask = mask(dx:(dx+size(croppedImg,1)-1),...
+                    dy:(dy+size(croppedImg,2)-1));
+                croppedMask = repmat(croppedMask,1,1,dz);
+            else
+                croppedMask = mask(dx:(dx+size(croppedImg,1)-1),...
+                    dy:(dy+size(croppedImg,2)-1),...
+                    dz:(dz+size(croppedImg,3)-1));
+            end
+        else
+            croppedMask = mask(dx:(dx+size(croppedImg,1)-1),...
+                    dy:(dy+size(croppedImg,2)-1));
+        end
         
         % set the background around the mask to the value of the closest pixel
         % within the image - this mitiages boundary artefacts.
@@ -105,7 +115,7 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
         croppedSmooth = ( croppedSmooth - max(0,m2) ) / ((s2+s)/2);
         croppedSmooth(isinf(croppedSmooth)) = 0; % avoid any infinites
         croppedSmooth(croppedSmooth<0) = 0;
-
+        
         % reassign pixels in the large image to the smoothed/normalized
         % values
         idxList = find(croppedMask==mList(i));
@@ -120,6 +130,7 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
         end
         smooth(newIdxList) = croppedSmooth(idxList);
     end
+   
 end
 
 function paddedImg = pad_with_object_values(img, mask)
@@ -301,11 +312,10 @@ function [croppedImg, dx, dy, dz] = cropImageBasedOnMask(img, mask, mID, padding
         error('Mask must be the same size as image');
     end
     if is3D
-        if ismatrix(mask)
-            % If mask is 2D but img is 3D, replicate along z
-            mask = repmat(mask, [1, 1, size(img, 3)]);
-        elseif size(img,3) ~= size(mask,3) 
-            error('Mask must be 2D or the same size as img');
+        if ~ismatrix(mask)
+            if size(img,3) ~= size(mask,3) 
+                error('Mask must be 2D or the same size as img');
+            end
         end
     end
 
@@ -314,7 +324,13 @@ function [croppedImg, dx, dy, dz] = cropImageBasedOnMask(img, mask, mID, padding
 
     % Find bounding box
     if is3D
-        [x, y, z] = ind2sub(size(region), find(region));
+        if ismatrix(mask)
+            % Convert ROI linear indices to subscript indices (i,j)
+            [x, y] = ind2sub(size(region), find(region));
+            z = [1,size(img,3)]; % dummy array of z values that encompasses the whole image
+        else
+            [x, y, z] = ind2sub(size(img), find(region));
+        end
     else
         [x, y] = ind2sub(size(region), find(region));
     end

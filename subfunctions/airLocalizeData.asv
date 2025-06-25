@@ -66,7 +66,7 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                     fl = getList(params.imgFileName,params.imgRecursive,...
                         caseSensitive,params.imgInclusionString,params.imgExclusionString);
                     
-                    if strcparams.adaptive
+                    if strcmp(params.threshUnits,'adaptive')
                         flm = getList(params.maskFileName,params.maskRecursive,...
                             caseSensitive,params.maskInclusionString,params.maskExclusionString);
                         fileNamesOnly = 0; % match full paths
@@ -88,7 +88,7 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                 else
                     fl = {params.imgFileName};
                 end
-                if params.adaptive
+                if strcmp(params.threshUnits,'adaptive')
                     if ~exist(params.maskFileName,'file')
                         obj.setMaskFileList({});
                         disp(['Could not find data file ',params.maskFileName]);
@@ -437,16 +437,19 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                             obj.retrieveMask(overwrite);
                         end
                         if obj.isFileIndexMaskLoaded(obj.fileIdx)
-                            obj.smooth = smooth_image_and_subtract_background8(...
+                            start1 = tic
+                            obj.smooth = smooth_image_and_subtract_background9(...
                                 obj.img,params,'mask',obj.mask);
+                            t1 = toc(start1)
                         else
                             disp(['Warning: mask image ', obj.curMaskFile,...
                                 'not loaded, cannot use it to smooth ',...
                                 obj.curImgFile]);
                         end
                     else
-                        obj.smooth = smooth_image_and_subtract_background8(...
+                        obj.smooth = smooth_image_and_subtract_background9(...
                             obj.img,params);
+                        t1 = toc(start1)
                     end
                 end
             end
