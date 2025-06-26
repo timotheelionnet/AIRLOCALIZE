@@ -82,7 +82,6 @@ elseif nargin == 1
 end
 
 %% analyze file(s)
-startTime1 = tic;
 % create saving dir if necessary
 if ~isempty(params.saveDirName)
     if ~exist(params.saveDirName,'dir')
@@ -99,7 +98,7 @@ for i=1:numel(alData.imgFileList)
     % retrieve current image
     overwrite = i~=1;
     alData.retrieveImg(overwrite);
-    
+
     % verify that dimensionality agrees with settings
     skipFile = 0;
     nd  = ndims(alData.img);
@@ -134,8 +133,8 @@ for i=1:numel(alData.imgFileList)
     end
 
     % smooth the image
-    alData.retrieveSmoothedImg(params,overwrite);
-
+    alData.retrieveSmoothedImg(params,0);
+    
     % go through all frames (if file is an image, just one "frame")
     loc = [];
     locVars = [];
@@ -164,39 +163,6 @@ for i=1:numel(alData.imgFileList)
         [tmpLoc,locVars] = assignMaskIDsToSpots(tmpLoc,locVars,alData,params);
         
         loc = [loc; tmpLoc];
-        
-        % [tmpLoc,tmpLocVars] = localizeImgPairAdaptive(...
-        %         alData.img,alData.mask,'locParams',params);
-        % if isempty(tmpLocVars)
-        %     locVars = tmpLocVars;
-        % end
-        % 
-        % % add mask IDs to each spot if adaptive mode was selected
-        % if strcmp(params.threshUnits,'adaptive')
-        %     tmpRoiID = [];
-        %     if ismember(ndims(alData.mask),[2,3])
-        %         if ismatrix(alData.mask)
-        %             idx = sub2ind(size(alData.mask), ...
-        %                 ceil(tmpLoc(:,1)),ceil(tmpLoc(:,2)) );
-        %         elseif ndims(alData.mask) == 3
-        %             idx = sub2ind(size(alData.mask), ...
-        %                 ceil(tmpLoc(:,1)),ceil(tmpLoc(:,2)),ceil(tmpLoc(:,3)) );
-        %         end
-        %         tmpRoiID = alData.mask(idx);
-        %     end 
-        %     if ~isempty(tmpRoiID)
-        %         tmpLoc = [tmpLoc(:,end-1),...
-        %             repmat(tmpRoiID,size(tmpLoc,1),1),tmpLoc(:,end)];
-        %         tmpLocVars = [tmpLocVars(1:end-1),'ROI_ID',tmpLocVars(end)];
-        %     end
-        % end
-        % 
-        % if isequal(locVars,tmpLocVars)
-        %     loc = [loc; tmpLoc];
-        % else
-        %     loc = concatenateRowsBasedOnStrings(...
-        %         loc,tmpLoc,locVars,tmpLocVars);
-        % end
     end
     
     % save spot coordinates and detection parameters to text file
@@ -208,7 +174,6 @@ for i=1:numel(alData.imgFileList)
     end
     disp('  done analyzing file.');
 end
-elapsed1 = toc(startTime1)
 disp('done.');
 
 end

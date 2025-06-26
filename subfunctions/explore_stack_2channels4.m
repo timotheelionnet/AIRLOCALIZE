@@ -69,8 +69,8 @@ set(handles.hxplot_range,'Callback',{@change_local_range,alData,fh});
 set(handles.hyplot_range,'Callback',{@change_local_range,alData,fh});
 set(handles.hzplot_range,'Callback',{@change_local_range,alData,fh});
 set(handles.hoverlay,'Callback',{@toggle_overlay,fh,alData});
-set(handles.hthresh_level,'Callback',{@update_threshold,fh,alData});
-set(handles.hthresh_units,'SelectionChangeFcn',{@update_threshold,fh,alData});
+set(handles.hthresh_level,'Callback',{@update_threshold,fh,alData,params});
+set(handles.hthresh_units,'SelectionChangeFcn',{@update_threshold,fh,alData,params});
 set(fh,'WindowKeyPressFcn',{@moveCursorWithArrows,alData,fh});
 
 set(fh,'SelectionType','alt');
@@ -191,7 +191,7 @@ function moveCursorWithArrows(src,eventData,alData,fh)
     end
 end
 
-function update_threshold(src,eventdata,fh,alData)
+function update_threshold(src,eventdata,fh,alData,params)
     handles = guihandles(fh);
     
     % update the threshold value from GUI
@@ -200,6 +200,25 @@ function update_threshold(src,eventdata,fh,alData)
     
     % update the threshold units from GUI
     str_units = get(get(handles.hthresh_units,'SelectedObject'),'Tag');
+    % if user selects adaptive but this wasnt set up in the parameters,
+    %this will lead to problems bc there is no mask to use; revert to SD
+    if strcmp(str_units,'adaptive') && ~strcmp(params.threshUnits,'adaptive')
+        str_units = 'SD';
+        allButtons = handles.hthresh_units.Children;
+        sdButton = findobj(allButtons,'Tag','SD');        
+        set(handles.hthresh_units,'SelectedObject',sdButton);
+        %drawnow;
+    end
+    
+    switchThresholdImage = 0;
+    if strcmp(params.threshUnits,'adaptive')        
+        if strcmp(str_units,'adaptive') ...
+                && ismember(thresh.units,{'absolute','SD','legacySD'}) ...
+                || strcmp(thresh.units,'adaptive') ...
+                && ismember(str_units,{'absolute','SD','legacySD'}) 
+            switchThresholdImage = 1; 
+        end
+    end
     if strcmp(str_units,'absolute') 
         thresh.units = 'absolute';
     elseif strcmp(str_units,'SD') 
@@ -208,6 +227,18 @@ function update_threshold(src,eventdata,fh,alData)
         thresh.units = 'adaptive';
     elseif strcmp(str_units,'legacySD') 
         thresh.units = 'legacySD';
+    end
+    % if we switch between adaptive and classic thresholding,
+    % we need to re-generate the smoothed image.
+    if switchThresholdImage 
+        set(handles.hthresh_units,'Title','Loading Smoothed Image...');
+        drawnow;
+        params2 = params.duplicate();
+        params2.threshUnits = thresh.units;
+        overwrite = 1;
+        alData.retrieveSmoothedImg(params2,overwrite);
+        set(handles.hthresh_units,'Title','Units');
+        drawnow;
     end
     
     z = str2double(get(handles.hzpos,'String'));
@@ -1079,23 +1110,28 @@ uicontrol('parent',hthresh,'Units','characters',...
 
 hth = uibuttongroup('parent',hthresh,'Units','characters',...
     'Tag','hthresh_units',...
+    'Enable','on',...
     'Title','Units',...
-    'Position',[0.5 0.2 20 5.5]);
+    'Position',[0.5 0.2 20 7]);
 
 hAbs = uicontrol('parent',hth,'Style','Radio','Units','characters',...
         'String','Absolute',...
+        'Enable','on',...
         'Tag','absolute',...
         'Position',[1 4.25 18 1.5]); 
 hSD = uicontrol('parent',hth,'Style','Radio','Units','characters',...
         'String','Intensity std',...
+        'Enable','on',...
         'Tag','SD',...
         'Position',[1 3 18 1.5]);
 hAdaptive = uicontrol('parent',hth,'Style','Radio','Units','characters',...
         'String','Adaptive from ROIs',...
+        'Enable','on',...
         'Tag','adaptive',...
         'Position',[1 1.75 18 1.5]);
 hLegacySD = uicontrol('parent',hth,'Style','Radio','Units','characters',...
         'String','Intensity std (Legacy)',...
+        'Enable','on',...
         'Tag','legacySD',...
         'Position',[1 0.5 18 1.5]);
     

@@ -87,9 +87,10 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
             img, mask, mList(i), paddingSize);
         if nd == 3 
             if ismatrix(mask)
+                % if image is 3D but mask is 2D, replicate the mask across
+                % all the planes
                 croppedMask = mask(dx:(dx+size(croppedImg,1)-1),...
                     dy:(dy+size(croppedImg,2)-1));
-                croppedMask = repmat(croppedMask,1,1,dz);
             else
                 croppedMask = mask(dx:(dx+size(croppedImg,1)-1),...
                     dy:(dy+size(croppedImg,2)-1),...
@@ -101,8 +102,8 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
         end
         
         % set the background around the mask to the value of the closest pixel
-        % within the image - this mitiages boundary artefacts.
-        croppedImg = pad_with_object_values(croppedImg, croppedMask==mList(i));
+        % within the image - this mitigates boundary artefacts.
+        croppedImg = pad_with_object_values(croppedImg, croppedMask, mList(i));
         
         % smooth the cropped image
         croppedSmooth = smoothImg(croppedImg, nd, filterHi, filterLo, psfSigma_xy);
@@ -122,24 +123,86 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
         if nd==2
             [x,y] = ind2sub(size(croppedMask),idxList);
             x = x + dx -1; y = y + dy -1; 
-            newIdxList = sub2ind(size(mask),x,y);
+            newIdxList = sub2ind(size(smooth),x,y);
         else
             [x,y,z] = ind2sub(size(croppedMask),idxList);
             x = x + dx -1; y = y + dy -1; z = z + dz -1;
-            newIdxList = sub2ind(size(mask),x,y,z);
+            newIdxList = sub2ind(size(smooth),x,y,z);
         end
         smooth(newIdxList) = croppedSmooth(idxList);
     end
    
 end
 
-function paddedImg = pad_with_object_values(img, mask)
-    % Ensure inputs are 2D and mask is logical
+%%
+function idx = getIdxInImgMatchingMaskValue(img,mask,maskVal)
+% find indices in image that mask the regions of the mask which have the
+% pixel value maskVal. Returns idx, an array of the linear indices of the pixels. 
+% Behavior is obvious if the sizes of img and mask are matching. 
+% If img is 3D and mask is 2D, returns the indices of all the voxels of img 
+% which x,y match maskVal when projected vertically onto mask.
+    ndImg = ndims(img);
+    ndMask = ndims(mask);
+    if ndImg == ndMask
+        if isequal(size(img),size(mask))
+            idx = find(mask==maskVal);
+            return
+        else
+            disp(['Error: Image size ',num2str(size(img)),' and mask size ',...
+                num2str(size(mask)),' should be equal;',...
+                'cannot find mask indices in img.']);
+            idx = [];
+            return
+        end
+    end
+
+    if ndImg ~= 3 || ndMask ~= 2
+        disp(['Error: Image dimensions ',num2str(ndImg),' and mask dimensions ',...
+            num2str(ndMask),' are incompatible;',...
+            'cannot find mask indices in img.']);
+        idx = [];
+        return
+    end
+    if ( size(img,1) ~= size(mask,1) ) || size(img,2) ~= size(mask,2)
+        disp(['Error: 2D Image size ',num2str([size(img,1),size(img,2)]),' and mask size ',...
+            num2str([size(mask,1),size(mask,2)]),' should be equal;',...
+            'cannot find mask indices in img.']);
+        idx = [];
+        return
+    end
+
+    % now is the case where image is 3D and mask is 2D
+    idx2D = find(mask==maskVal);
+    [nx, ny, nz] = size(img);
+
+    % Convert to subscript indices (i,j)
+    [i, j] = ind2sub([nx, ny], idx2D);
+    
+    % Expand to all k values
+    k = reshape(1:nz, 1, nz);  % [1 x nz]
+    i = reshape(i, [], 1);     % [N x 1]
+    j = reshape(j, [], 1);     % [N x 1]
+    
+    % Broadcast and get all (i,j,k)
+    I = repmat(i, 1, nz);  % [N x nz]
+    J = repmat(j, 1, nz);  % [N x nz]
+    K = repmat(k, length(i), 1);  % [N x nz]
+    
+    % Convert back to linear indices into [nx ny nz]
+    idx = sub2ind([nx ny nz], I(:), J(:), K(:));
+end
+
+%%
+function paddedImg = pad_with_object_values(img, mask, maskVal)
+    % Ensure mask is logical
     img = double(img);
-    mask = logical(mask);
+    mask = (mask == maskVal);
 
     % Compute distance transform and index of nearest object pixel
-    [~, idx] = bwdist(mask);
+    if ndims(img) == ndims(mask)
+        [~, idx] = bwdist(mask);
+    else
+    end
 
     % Initialize result
     paddedImg = img;
@@ -148,6 +211,7 @@ function paddedImg = pad_with_object_values(img, mask)
     paddedImg(~mask) = img(idx(~mask));
 end
 
+%%
 function smooth = smoothImg(img, numDim, filterHi, filterLo, psfSigma_xy)
     if numDim == 3 || numDim == 2    
         
