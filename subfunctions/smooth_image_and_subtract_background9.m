@@ -103,11 +103,13 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
         
         % set the background around the mask to the value of the closest pixel
         % within the image - this mitigates boundary artefacts.
-        croppedImg = pad_with_object_values(croppedImg, croppedMask, mList(i));
+        croppedImg = padWithObjectValues(croppedImg, croppedMask, mList(i));
         
         % smooth the cropped image
         croppedSmooth = smoothImg(croppedImg, nd, filterHi, filterLo, psfSigma_xy);
-        
+        mList(i)
+        min(croppedSmooth(:))
+        max(croppedSmooth(:))
         % get mean & std of intensity over the mask region
         [~,s,m2,s2] = getMeanStdInMask(croppedSmooth,croppedMask,mList(i));
         
@@ -119,61 +121,63 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
         
         % reassign pixels in the large image to the smoothed/normalized
         % values
-        idxList = find(croppedMask==mList(i));
+        idxList = getIdxInImgMatchingMaskValue(...
+                        croppedSmooth,croppedMask,mList(i));
         if nd==2
-            [x,y] = ind2sub(size(croppedMask),idxList);
+            [x,y] = ind2sub(size(croppedSmooth),idxList);
             x = x + dx -1; y = y + dy -1; 
             newIdxList = sub2ind(size(smooth),x,y);
         else
-            [x,y,z] = ind2sub(size(croppedMask),idxList);
+            [x,y,z] = ind2sub(size(croppedSmooth),idxList);
             x = x + dx -1; y = y + dy -1; z = z + dz -1;
             newIdxList = sub2ind(size(smooth),x,y,z);
         end
         smooth(newIdxList) = croppedSmooth(idxList);
     end
-   
 end
 
 %%
 function idx = getIdxInImgMatchingMaskValue(img,mask,maskVal)
-% find indices in image that mask the regions of the mask which have the
-% pixel value maskVal. Returns idx, an array of the linear indices of the pixels. 
+% find indices in image img that map to the regions of the mask which have the
+% pixel value maskVal. 
+% Returns idx, a 1D array of the linear indices of the pixels. 
 % Behavior is obvious if the sizes of img and mask are matching. 
 % If img is 3D and mask is 2D, returns the indices of all the voxels of img 
 % which x,y match maskVal when projected vertically onto mask.
-    ndImg = ndims(img);
-    ndMask = ndims(mask);
-    if ndImg == ndMask
-        if isequal(size(img),size(mask))
-            idx = find(mask==maskVal);
-            return
-        else
-            disp(['Error: Image size ',num2str(size(img)),' and mask size ',...
-                num2str(size(mask)),' should be equal;',...
-                'cannot find mask indices in img.']);
-            idx = [];
-            return
-        end
-    end
-
-    if ndImg ~= 3 || ndMask ~= 2
-        disp(['Error: Image dimensions ',num2str(ndImg),' and mask dimensions ',...
-            num2str(ndMask),' are incompatible;',...
-            'cannot find mask indices in img.']);
+    
+    [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask);
+    if errorFlag == 1
         idx = [];
         return
     end
-    if ( size(img,1) ~= size(mask,1) ) || size(img,2) ~= size(mask,2)
-        disp(['Error: 2D Image size ',num2str([size(img,1),size(img,2)]),' and mask size ',...
-            num2str([size(mask,1),size(mask,2)]),' should be equal;',...
-            'cannot find mask indices in img.']);
-        idx = [];
+    
+    % trivial case when image and mask have the same sizes
+    if isequal(size(img),size(mask))
+        idx = find(mask==maskVal);
         return
     end
 
     % now is the case where image is 3D and mask is 2D
     idx2D = find(mask==maskVal);
     [nx, ny, nz] = size(img);
+    squeezeResult = 1;
+    idx = expand2DIndicesTo3D(idx2D,nx,ny,nz,squeezeResult); 
+    idx = idx(1:numel(idx));
+end
+
+%%
+function idx3D = expand2DIndicesTo3D(idx2D,nx,ny,nz,squeezeResult)
+    % from  an array of 2D linear indices relative to a matrix of size [nx,ny], 
+    % generates an array of linear indices of all the voxels of the 3D array
+    % (size [nx ny nz]) which 2D projection is a member of the list of 2D
+    % linear indices.
+    % if the input has size [ni nj], the output has size [ni nj nz]
+    % if the option squeezeResult has been selected, the dimensions of zie
+    % 1 will be squeezed to return the lowest possible dimension array.
+
+    % map idx2D array to a vector
+    s = size(idx2D);
+    idx2D  = idx2D(1:numel(idx2D));
 
     % Convert to subscript indices (i,j)
     [i, j] = ind2sub([nx, ny], idx2D);
@@ -189,19 +193,40 @@ function idx = getIdxInImgMatchingMaskValue(img,mask,maskVal)
     K = repmat(k, length(i), 1);  % [N x nz]
     
     % Convert back to linear indices into [nx ny nz]
-    idx = sub2ind([nx ny nz], I(:), J(:), K(:));
+    idx3D = sub2ind([nx ny nz], I(:), J(:), K(:));
+    
+    % recover original array format of the input
+    idx3D = reshape(idx3D,[s,nz]);
+    
+    % remove useless dimensions if option has been selected
+    if squeezeResult
+        idx3D = squeeze(idx3D);
+    end
 end
 
 %%
-function paddedImg = pad_with_object_values(img, mask, maskVal)
+function paddedImg = padWithObjectValues(img, mask, maskVal)
+    
+    % check that size and dimensions of img and mask are compatible 
+    [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask);
+    if errorFlag == 1
+        paddedImg = [];
+        return
+    end
+
     % Ensure mask is logical
     img = double(img);
     mask = (mask == maskVal);
 
     % Compute distance transform and index of nearest object pixel
-    if ndims(img) == ndims(mask)
-        [~, idx] = bwdist(mask);
-    else
+    [~, idx] = bwdist(mask);
+    
+    % if mask is 2D and image is 3D, convert the 2D closest pixel in the
+    % mask into its 3D counterpart
+    if ndims(img) == 3 && ismatrix(mask)
+        squeezeResult = 0;
+        [nx,ny,nz] = size(img);
+        idx = expand2DIndicesTo3D(idx,nx,ny,nz,squeezeResult);
     end
 
     % Initialize result
@@ -209,6 +234,61 @@ function paddedImg = pad_with_object_values(img, mask, maskVal)
 
     % Fill background pixels with values from nearest object pixels
     paddedImg(~mask) = img(idx(~mask));
+end
+
+%%
+function [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask)
+    % image and mask must be 2D or 3D
+    % nx ny must be the same.
+    % if img is 2D, mask needs to be 2D
+    % if img is 3D, mask can either be 2D or have the same nz as img.
+    ndImg = ndims(img);
+    ndMask = ndims(mask);
+    errorFlag = 0;
+
+    if ~ismember(ndImg,[2,3])
+        disp(['Error: Image is ',num2str(ndImg),'D; needs to be 2D or 3D.']);
+        errorFlag = 1;
+        return
+    end
+    if ~ismember(ndMask,[2,3])
+        disp(['Error: Mask is ',num2str(ndMask),'D; needs to be 2D or 3D.']);
+        errorFlag = 1;
+        return
+    end
+
+    if size(img,1) ~= size(mask,1) || size(img,2) ~= size(mask,2)
+        disp(['Error: Image 2D size ',num2str([size(img,1),size(img,2)]),' and mask 2D size ',...
+            num2str([size(mask,1),size(mask,2)]),' should be equal;',...
+            'cannot find mask indices in img.']);
+        errorFlag = 1;
+        return
+    end
+
+    if ndImg == 2 && ndMask == 3
+        disp(['Error: Image dimensions ',num2str(ndImg),' and mask dimensions ',...
+            num2str(ndMask),' are incompatible;',...
+            'cannot find mask indices in img.']);
+        errorFlag = 1;
+        return
+    end
+
+    if ndImg == 3 && ndMask == 3
+        if size(img,3) ~= size(mask,3) 
+            if size(mask,3) == 1
+                % convert mask to a bona fide 2D matrix if the third
+                % dimension has size 1.
+                mask = squeeze(mask);
+            else
+                disp(['Error: Image z size ',num2str(size(img,3)),' and mask z size ',...
+                    num2str(size(mask,3)),' should be equal;',...
+                    'cannot find mask indices in img.']);
+                errorFlag = 1;
+                return
+            end
+        end
+    end
+
 end
 
 %%
@@ -227,16 +307,31 @@ end
 
 %%
 function [m,s,m2,s2] = getMeanStdInMask(img,mask,maskVal)
-    % outputs the mean (m), std (s), 
+    % uses an ROI of ID value maskVal in the reference mask array mask to
+    % compute summary statistics in the matching pixels/voxels of img.
+    % Outputs the mean (m), std (s), 
     % the robust estimate of the mode (m2), 
     % and the pseudo std (s2) which is obtained as m2 - median( pixels with values below m2)
+    % the function handles img and mask having the same size, 
+    % or img being 3D and mask being 2D, in which case all img voxels that project
+    % vertically onto the ROI in the mask are included in the summary
+    % statistics.
+
+    % check dimensions compatibility
+    [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask);
+    if errorFlag ==1
+        m = NaN; s = NaN;m2 = NaN; s2 = NaN;
+        return
+    end
     
+    % number of bins used to compute the mode 
+    % (these bins will map the 20th 80th percentile interval)
     nBins = 20;
     
-    img = img(mask == maskVal);
+    idx = getIdxInImgMatchingMaskValue(img,mask,maskVal);
+    img = img(idx);
     m = mean(img(:));
     s = std(img(:));
-    
     m2 = estimateModeRobust(img(:),nBins);
     s2 = m2 - median(img(img <= m2));
 
@@ -326,11 +421,11 @@ function binEdges = computeRobustHistBins(data,nBins)
     data = data(~isinf(data));
 
     % Filter data within the 20-80 percentile range
-    p20 = prctile(data, 20); 
-    p80 = prctile(data, 80); 
+    p20 = prctile(data, 20) 
+    p80 = prctile(data, 80) 
     
     % split that range into nBins
-    binSize = (p80-p20)/nBins;
+    binSize = (p80-p20)/nBins
     
     % Define bin edges (n equal-sized bins)
     binEdges = min(data):binSize:max(data);

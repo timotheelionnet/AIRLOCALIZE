@@ -1,4 +1,5 @@
-function smooth = smooth_image_and_subtract_background9(img,params,varargin)
+%%
+function smooth = smooth_image_and_subtract_background10(img,params,varargin)
     % applies a bandpass filter to the image img
     % if image is a stack, each slice is 2D-filtered independently.
     
@@ -81,7 +82,7 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
     
     %% loop through masks
     smooth = zeros(size(img));
-    for i=1:nm
+    for i=1:nm 
         % crop rectangle ROI around mask 
         [croppedImg,dx,dy,dz] = cropImageBasedOnMask(...
             img, mask, mList(i), paddingSize);
@@ -107,8 +108,7 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
         
         % smooth the cropped image
         croppedSmooth = smoothImg(croppedImg, nd, filterHi, filterLo, psfSigma_xy);
-        min(croppedSmooth(:))
-        max()
+        
         % get mean & std of intensity over the mask region
         [~,s,m2,s2] = getMeanStdInMask(croppedSmooth,croppedMask,mList(i));
         
@@ -352,7 +352,11 @@ function xMode = estimateModeRobust(d,nBins)
     % 80th percentile of the dataset data.
     binEdges = computeRobustHistBins(d,nBins); 
     [n,x] = hist(d,binEdges);
-    
+    % truncate the first and last datapoint to avoid picking up the edge bin in the case of
+    % long tailed distribtions
+    n = n(2:end-1);
+    x = x(2:end-1);
+
     % estimate the distribution mode
     [~,idxMode] = max(n); % this extracts the index of the maximum bin
     winSize = round(nBins/4);
@@ -417,6 +421,9 @@ function binEdges = computeRobustHistBins(data,nBins)
     % This approach ensure robust sampling of the mode of the distribution 
     % even for long-tailed distributions.
 
+    % max number of bins
+    nMax = 1000;
+
     data = data(~isinf(data));
 
     % Filter data within the 20-80 percentile range
@@ -427,7 +434,11 @@ function binEdges = computeRobustHistBins(data,nBins)
     binSize = (p80-p20)/nBins;
     
     % Define bin edges (n equal-sized bins)
-    binEdges = min(data):binSize:max(data);
+    if (max(data) - min(data))/binSize <= nMax
+        binEdges = min(data):binSize:max(data);
+    else
+        binEdges = (median(data) - nMax/2*binSize) : binSize : (median(data) + nMax/2*binSize);
+    end
 end
 
 %%
@@ -457,6 +468,7 @@ function [croppedImg, dx, dy, dz] = cropImageBasedOnMask(img, mask, mID, padding
 %
 % - croppedImg: cropped subregion of img
 % - dx, dy, dz: offset indices into the original image
+
 
     % Validate inputs
     if nargin < 4
@@ -511,3 +523,4 @@ function [croppedImg, dx, dy, dz] = cropImageBasedOnMask(img, mask, mID, padding
     dx = xmin;
     dy = ymin;
 end
+

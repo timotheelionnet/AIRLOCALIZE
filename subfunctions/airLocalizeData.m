@@ -435,7 +435,7 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                             obj.retrieveMask(overwrite);
                         end
                         if obj.isFileIndexMaskLoaded(obj.fileIdx)
-                            obj.smooth = smooth_image_and_subtract_background9(...
+                            obj.smooth = smooth_image_and_subtract_background10(...
                                 obj.img,params,'mask',obj.mask);
                         else
                             disp(['Warning: mask image ', obj.curMaskFile,...
@@ -443,7 +443,7 @@ classdef airLocalizeData < handle & matlab.mixin.Copyable
                                 obj.curImgFile]);
                         end
                     else
-                        obj.smooth = smooth_image_and_subtract_background9(...
+                        obj.smooth = smooth_image_and_subtract_background10(...
                             obj.img,params);
                     end
                 end
