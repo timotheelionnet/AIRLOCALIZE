@@ -54,7 +54,7 @@ function smooth = smooth_image_and_subtract_background10(img,params,varargin)
     if isempty(mask)
         disp('smoothing image...'); 
         % classic bandpass smoothing filter applied to entire image
-        smooth = smoothImg(img, params.numDim, params.filterHi, params.filterLo,...
+        smooth = smoothImg(img, params.filterHi, params.filterLo,...
             params.psfSigma(1));
     
         % subtract the background mean
@@ -93,53 +93,46 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
     for i=1:nm 
         % crop rectangle ROI around mask 
         t1 = tic;
-        [croppedImg,dx,dy,dz] = cropImageBasedOnMask(...
+        [croppedImg,dx,dy,dz,idxCrop] = cropImageBasedOnMask(...
             img, mask, mList(i), paddingSize);
         t(i,1) = toc(t1);
-        if nd == 3 
-            if ismatrix(mask)
-                % if image is 3D but mask is 2D, replicate the mask across
-                % all the planes
-                croppedMask = mask(dx:(dx+size(croppedImg,1)-1),...
-                    dy:(dy+size(croppedImg,2)-1));
-            else
-                croppedMask = mask(dx:(dx+size(croppedImg,1)-1),...
-                    dy:(dy+size(croppedImg,2)-1),...
-                    dz:(dz+size(croppedImg,3)-1));
-            end
+        if ndims(mask) == ndims(img)
+            croppedMask = false(size(croppedImg));
+            croppedMask(idxCrop) = true;
         else
-            croppedMask = mask(dx:(dx+size(croppedImg,1)-1),...
-                    dy:(dy+size(croppedImg,2)-1));
+            % keep cropped mask 2D when possible for computation efficiency
+            croppedMask = mask(dx:dx+size(croppedImg,1)-1,...
+                dy:dy+size(croppedImg,2)-1) == mList(i);
         end
         
         % set the background around the mask to the value of the closest pixel
         % within the image - this mitigates boundary artefacts.
         t2 = tic;
-        croppedImg = padWithObjectValues(croppedImg, croppedMask, mList(i));
+        croppedImg = padWithObjectValues(croppedImg, croppedMask, true);
+        %croppedImg = padWithObjectValuesLinIdx(croppedImg, idxCrop);
         t(i,2) = toc(t2);
         
         % smooth the cropped image
         t3 = tic;
-        cs = smoothImg(croppedImg, nd, filterHi, filterLo, psfSigma_xy);
+        cs = smoothImg(croppedImg, filterHi, filterLo, psfSigma_xy);
         t(i,3) = toc(t3);
         
         % get mean & std of intensity over the mask region
         t4 = tic;
-        [~,s,m2,s2,idxList] = getMeanStdInMask(cs,croppedMask,mList(i));
+        %[~,s,m2,s2] = getMeanStdInMask(cs,croppedMask,true);
+        [~,s,m2,s2] = getMeanStdInMaskLinIdx(cs,idxCrop);
         t(i,4) = toc(t4);
         
         % subtract the mode within the mask, and divide by the estimate of
         % the STD
         croppedSmooth = zeros(size(cs));
-        croppedSmooth(idxList) = cs(idxList);
-        croppedSmooth(~idxList) = 0;
+        croppedSmooth(idxCrop) = cs(idxCrop);
         croppedSmooth = ( croppedSmooth - max(0,m2) ) / ((s2+s)/2);
         croppedSmooth(isinf(croppedSmooth) | croppedSmooth<0) = 0; % avoid any infinites, negatives
         
         % reassign pixels in the large image to the smoothed/normalized
         % values
         t5 = tic;
-        %%%%%%%%
         if nd==2
             [nx, ny] = size(cs);
             smooth(dx:dx+nx-1,dy:dy+ny-1) = smooth(dx:dx+nx-1,dy:dy+ny-1) ...
@@ -150,18 +143,6 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
                 smooth(dx:dx+nx-1,dy:dy+ny-1,dz:dz+nz-1) ...
                 + croppedSmooth;
         end
-        %%%%%%%%
-        % if nd==2
-        %     [x,y] = ind2sub(size(croppedSmooth),idxList);
-        %     x = x + dx -1; y = y + dy -1; 
-        %     newIdxList = sub2ind(size(smooth),x,y);
-        % else
-        %     [x,y,z] = ind2sub(size(croppedSmooth),idxList);
-        %     x = x + dx -1; y = y + dy -1; z = z + dz -1;
-        %     newIdxList = sub2ind(size(smooth),x,y,z);
-        % end
-        % smooth(newIdxList) = croppedSmooth(idxList);
-        %%%%%%%%
         t(i,5) = toc(t5);
     end
     sum(t)
@@ -270,6 +251,42 @@ function paddedImg = padWithObjectValues(img, mask, maskVal)
     paddedImg(~mask) = img(idx(~mask));
 end
 
+function paddedImg = padWithObjectValuesLinIdx(img, linIdx)
+    % given an image img and a region of interest indexed by a list of linear indices LinIdx,
+    % pads the pixels outside of the region of interest with the value of
+    % the closest pixel within the region of interest.
+
+    % this should have been checked upstream of this function call so
+    % commenting it out
+    % % check that size and dimensions of img and mask are compatible 
+    % [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask);
+    % if errorFlag == 1
+    %     paddedImg = [];
+    %     return
+    % end
+
+    % create mask based on linear indices
+    mask = zeros(size(img));
+    mask(linIdx) = 1;
+
+    % Compute distance transform and index of nearest object pixel
+    [~, idx] = bwdist(mask);
+    
+    % if mask is 2D and image is 3D, convert the 2D closest pixel in the
+    % mask into its 3D counterpart
+    if ndims(img) == 3 && ismatrix(mask)
+        squeezeResult = 0;
+        [nx,ny,nz] = size(img);
+        idx = expand2DIndicesTo3D(idx,nx,ny,nz,squeezeResult);
+    end
+
+    % Initialize result
+    paddedImg = img;
+
+    % Fill background pixels with values from nearest object pixels
+    paddedImg(~mask) = img(idx(~mask));
+end
+
 %%
 function [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask)
     % image and mask must be 2D or 3D
@@ -322,16 +339,15 @@ function [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask)
             end
         end
     end
-
 end
 
 %%
-function smooth = smoothImg(img, numDim, filterHi, filterLo, psfSigma_xy)
-    if numDim == 3 || numDim == 2    
+function smooth = smoothImg(img, filterHi, filterLo, psfSigma_xy)
+    if ismember(ndims(img),[2,3])
         
         %factors 1.5 is a heuristic attempt to reproduce results
         %from the Fourier filter given the same parameters
-        smooth = 1.5 * DOGfilter(img, filterHi, filterLo * psfSigma_xy, 1,5);
+        smooth = 1.5 * DOGfilter2(img, filterHi, filterLo * psfSigma_xy, [],[]);
     else
         disp('data type error: smoothing only possible on 2d images or 3d stacks');
         smooth = 0;
@@ -398,6 +414,63 @@ function [m,s,m2,s2,idxList] = getMeanStdInMask(img,mask,maskVal,varargin)
     s2 = m2 - median(img(img <= m2));
 end
 
+function [m,s,m2,s2,idxList] = getMeanStdInMaskLinIdx(img,idxList,varargin)
+    % computes summary statistics in an ROI of an img indexed by linIdx
+    
+    % INPUT
+    % img is the image
+    % idxList is the list of linear indices that define the ROI
+    
+    % OPTIONAL
+    % 'useMode': set to 1 to output the robust estimate of the mode for m2
+    % instead of the median (Default is zero, output m2 = median).
+
+    % OUTPUT
+    % m: mean of pixels that belonw to the mask
+    % s: std of pixels that belonw to the mask
+    % m2: median of pixels that belonw to the mask
+    % s2: pseudo std of pixels that belonw to the mask
+        % computed as m2 - median( pixels with values below m2)
+    % idxList: list of linear indices of the image voxels that fall under
+        % the mask
+
+    % the function handles img and mask having the same size, 
+    % or img being 3D and mask being 2D, in which case all img voxels that project
+    % vertically onto the ROI in the mask are included in the summary
+    % statistics.
+    
+    % gathe optional args
+    p = inputParser();
+    p.addParameter('useMode',0);
+    p.parse(varargin{:});
+    useMode = p.Results.useMode;
+    
+    % this should have been checked upstream of this function call so
+    % commenting it out
+    % % check size/dimensions compatibility between img and mask
+    % [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask);
+    % if errorFlag ==1
+    %     m = NaN; s = NaN;m2 = NaN; s2 = NaN;
+    %     return
+    % end
+    img = img(idxList(1:numel(idxList))); % make sure this is a row vector
+    m = mean(img);
+    s = std(img);
+    if useMode
+        % assing m2 to the mode if option is chosen
+        % number of bins used to compute the mode 
+        % (these bins will map the 20th 80th percentile interval)
+        nBins = 20;
+        m2 = estimateModeRobust(img,nBins);
+        s2 = m2 - median(img(img <= m2));
+    else
+        % assign m2 to median by default
+        m2 = prctile(img,[0.25,0.5]);
+        s2 = m2(2) - m2(1);
+        m2 = m2(1);
+    end   
+end
+
 %%
 function xMode = estimateModeRobust(d,nBins)
     % estimates the mode of a distribution of data d
@@ -431,23 +504,6 @@ function xMode = estimateModeRobust(d,nBins)
     nw = n(idxw);
     xw = x(idxw);
     [xMode,~] = findQuadMax2(nw',xw');
-end
-
-%%
-function m = robustModeKernel(d)
-    
-    % Remove NaNs or Infs
-    d = d(~isnan(d) & isfinite(d));
-    if isempty(d)
-        m = NaN;
-        return;
-    end
-
-    % Use Gaussian KDE
-    [f, xi] = ksdensity(d, 'Bandwidth', 1.06*std(d)*numel(d)^(-1/5));  % Silverman's rule of thumb
-    % Find mode as maximum of density
-    [~, idx] = max(f);
-    m = xi(idx);
 end
 
 %% find approximate x,y coordinate of local max
@@ -544,11 +600,12 @@ function mList = collectMaskIds(mask,eliminateBackgroundROIs,backgroundID)
 end
 
 %%
-function [croppedImg, dx, dy, dz] = cropImageBasedOnMask(img, mask, mID, paddingSize)
+function [croppedImg, dx, dy, dz, idxCrop, idxImg] = cropImageBasedOnMask(img, mask, mID, paddingSize)
 % CROP_MASK Crops a region of 'img' based on a labeled region in 'mask'.
 %
 % [croppedImg, dx, dy, dz] = crop_mask(img, mask, mID, paddingSize)
 %
+% INPUT
 % - img: 2D or 3D image (e.g., [nx, ny] or [nx, ny, nz])
 % - mask: same size as img or a 2D mask if img is 3D
 % - mID: integer value in mask to crop around
@@ -556,50 +613,52 @@ function [croppedImg, dx, dy, dz] = cropImageBasedOnMask(img, mask, mID, padding
 %
 % - croppedImg: cropped subregion of img
 % - dx, dy, dz: offset indices into the original image
-
+% idxCrop: list of linear indices of the voxels that map to the object relative to the
+    % cropped image
+% idxImg: list of linear indices of the voxels that map to the object
+    % relative the original image
 
     % Validate inputs
     if nargin < 4
         paddingSize = 0;
     end
+    
+    % this should have been checked upstream so commenting it out
+    % % check size/dimensions compatibility between img and mask
+    % [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask);
+    % if errorFlag ==1
+    %     croppedImg = []; dx=[]; dy=[]; dz=[]; idxCrop=[]; idxImg = [];
+    %     return
+    % end
 
     nd = ndims(img);
-
     is3D = nd == 3;
-    if size(img,1) ~= size(mask,1) || size(img,2) ~= size(mask,2)
-        error('Mask must be the same size as image');
-    end
-    if is3D
-        if ~ismatrix(mask)
-            if size(img,3) ~= size(mask,3) 
-                error('Mask must be 2D or the same size as img');
-            end
-        end
-    end
-
+    
     % Logical mask of the selected region
-    region = (mask == mID);
-
+    idxImg = find(mask == mID);
+    
     % Find bounding box
     if is3D
+        [nx, ny, nz] = size(img);
         if ismatrix(mask)
             % Convert ROI linear indices to subscript indices (i,j)
-            [x, y] = ind2sub(size(region), find(region));
+            [x, y] = ind2sub([nx, ny], idxImg);
             z = [1,size(img,3)]; % dummy array of z values that encompasses the whole image
         else
-            [x, y, z] = ind2sub(size(img), find(region));
+            [x, y, z] = ind2sub([nx, ny, nz], idxImg);
         end
     else
-        [x, y] = ind2sub(size(region), find(region));
+        [nx, ny] = size(img);
+        [x, y] = ind2sub([nx, ny], idxImg);
     end
     xmin = max(min(x) - paddingSize, 1);
-    xmax = min(max(x) + paddingSize, size(img, 1));
+    xmax = min(max(x) + paddingSize, nx);
     ymin = max(min(y) - paddingSize, 1);
-    ymax = min(max(y) + paddingSize, size(img, 2));
+    ymax = min(max(y) + paddingSize, ny);
 
     if is3D
         zmin = max(min(z) - paddingSize, 1);
-        zmax = min(max(z) + paddingSize, size(img, 3));
+        zmax = min(max(z) + paddingSize, nz);
         croppedImg = img(xmin:xmax, ymin:ymax, zmin:zmax);
         dz = zmin;
     else
@@ -610,5 +669,26 @@ function [croppedImg, dx, dy, dz] = cropImageBasedOnMask(img, mask, mID, padding
     % Return offsets
     dx = xmin;
     dy = ymin;
+    
+    % compute linear indices relative to the whole image
+    if is3D && ismatrix(mask)
+        idxImg = expand2DIndicesTo3D(idxImg,nx,ny,nz,1);
+    end
+
+    % compute linear indices relative to the mask
+    if is3D
+        if ismatrix(mask)
+            [x, y, z] = ind2sub([nx, ny, nz], idxImg);
+        end
+        x = x - xmin + 1;
+        y = y - ymin + 1;
+        z = z - zmin + 1;
+        idxCrop = sub2ind(size(croppedImg),x,y,z);
+    else
+        x = x - xmin + 1;
+        y = y - ymin + 1;
+        idxCrop = sub2ind(size(croppedImg),x,y);
+    end
+
 end
 
