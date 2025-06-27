@@ -54,7 +54,7 @@ function smooth = smooth_image_and_subtract_background10(img,params,varargin)
     if isempty(mask)
         disp('smoothing image...'); 
         % classic bandpass smoothing filter applied to entire image
-        smooth = smoothImg(img, params.numDim, params.filterHi, params.filterLo,...
+        smooth = smoothImg(img, params.filterHi, params.filterLo,...
             params.psfSigma(1));
     
         % subtract the background mean
@@ -93,40 +93,46 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
     for i=1:nm 
         % crop rectangle ROI around mask 
         t1 = tic;
-        [croppedImg,dx,dy,dz,idxCrop,idxImg] = cropImageBasedOnMask(...
+        [croppedImg,dx,dy,dz,idxCrop] = cropImageBasedOnMask(...
             img, mask, mList(i), paddingSize);
         t(i,1) = toc(t1);
-        croppedMask = zeros(size(croppedImg));
-        croppedMask(idxCrop) = 1;
+        if ndims(mask) == ndims(img)
+            croppedMask = false(size(croppedImg));
+            croppedMask(idxCrop) = true;
+        else
+            % keep cropped mask 2D when possible for computation efficiency
+            croppedMask = mask(dx:dx+size(croppedImg,1)-1,...
+                dy:dy+size(croppedImg,2)-1) == mList(i);
+        end
         
         % set the background around the mask to the value of the closest pixel
         % within the image - this mitigates boundary artefacts.
         t2 = tic;
-        %croppedImg = padWithObjectValues(croppedImg, croppedMask, mList(i));
-        croppedImg = padWithObjectValuesLinIdx(croppedImg, idxCrop);
+        croppedImg = padWithObjectValues(croppedImg, croppedMask, true);
+        %croppedImg = padWithObjectValuesLinIdx(croppedImg, idxCrop);
         t(i,2) = toc(t2);
         
         % smooth the cropped image
         t3 = tic;
-        cs = smoothImg(croppedImg, nd, filterHi, filterLo, psfSigma_xy);
+        cs = smoothImg(croppedImg, filterHi, filterLo, psfSigma_xy);
         t(i,3) = toc(t3);
         
         % get mean & std of intensity over the mask region
         t4 = tic;
-        [~,s,m2,s2,idxList] = getMeanStdInMask(cs,croppedMask,mList(i));
+        %[~,s,m2,s2] = getMeanStdInMask(cs,croppedMask,true);
+        [~,s,m2,s2] = getMeanStdInMaskLinIdx(cs,idxCrop,'downSample',10);
         t(i,4) = toc(t4);
         
         % subtract the mode within the mask, and divide by the estimate of
         % the STD
         croppedSmooth = zeros(size(cs));
-        croppedSmooth(idxList) = cs(idxList);
+        croppedSmooth(idxCrop) = cs(idxCrop);
         croppedSmooth = ( croppedSmooth - max(0,m2) ) / ((s2+s)/2);
         croppedSmooth(isinf(croppedSmooth) | croppedSmooth<0) = 0; % avoid any infinites, negatives
         
         % reassign pixels in the large image to the smoothed/normalized
         % values
         t5 = tic;
-        %%%%%%%%
         if nd==2
             [nx, ny] = size(cs);
             smooth(dx:dx+nx-1,dy:dy+ny-1) = smooth(dx:dx+nx-1,dy:dy+ny-1) ...
@@ -137,18 +143,6 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
                 smooth(dx:dx+nx-1,dy:dy+ny-1,dz:dz+nz-1) ...
                 + croppedSmooth;
         end
-        %%%%%%%%
-        % if nd==2
-        %     [x,y] = ind2sub(size(croppedSmooth),idxList);
-        %     x = x + dx -1; y = y + dy -1; 
-        %     newIdxList = sub2ind(size(smooth),x,y);
-        % else
-        %     [x,y,z] = ind2sub(size(croppedSmooth),idxList);
-        %     x = x + dx -1; y = y + dy -1; z = z + dz -1;
-        %     newIdxList = sub2ind(size(smooth),x,y,z);
-        % end
-        % smooth(newIdxList) = croppedSmooth(idxList);
-        %%%%%%%%
         t(i,5) = toc(t5);
     end
     sum(t)
@@ -181,13 +175,13 @@ function idx = getIdxInImgMatchingMaskValue(img,mask,maskVal)
     idx2D = find(mask==maskVal);
     [nx, ny, nz] = size(img);
     squeezeResult = 1;
-    idx = expand2DIndicesTo3D(idx2D,nx,ny,nz,squeezeResult); 
+    idx = expand2DIndicesTo3D(idx2D,nx,ny,nz,squeezeResult,'linear'); 
     idx = idx(1:numel(idx));
 end
 
 %%
-function idx3D = expand2DIndicesTo3D(idx2D,nx,ny,nz,squeezeResult)
-    % from  an array of 2D linear indices relative to a matrix of size [nx,ny], 
+function idx3D = expand2DIndicesTo3D(idx2D,nx,ny,nz,squeezeResult,inputMode)
+    % from  an array of 2D linear indices (or x,y coordinates) relative to a matrix of size [nx,ny], 
     % generates an array of linear indices of all the voxels of the 3D array
     % (size [nx ny nz]) which 2D projection is a member of the list of 2D
     % linear indices.
@@ -195,12 +189,30 @@ function idx3D = expand2DIndicesTo3D(idx2D,nx,ny,nz,squeezeResult)
     % if the option squeezeResult has been selected, the dimensions of zie
     % 1 will be squeezed to return the lowest possible dimension array.
 
-    % map idx2D array to a vector
-    s = size(idx2D);
-    idx2D  = idx2D(1:numel(idx2D));
+    % INPUT
+    % idx2D either a list of linear indices (if inputMode = 'linear'), 
+        % or a 2D array or x y coordinates in 2 columns (if inputMode = 'subscript')
+    % nx,ny,nz is the size of the 3D array that the indices are replicated into
+    % squeezeResult is to ensure the dimensions of the result are squeezed.
 
-    % Convert to subscript indices (i,j)
-    [i, j] = ind2sub([nx, ny], idx2D);
+    % inputMode can be either: 
+        % 'linear': idx2D has the format of linear indices
+        % or 
+        % 'subscript': idx2D is a 2 column matrix with x and y coordinates 
+
+    % get list of x and y coordinates    
+    switch inputMode 
+        case 'linear'
+            % map idx2D array to a vector
+            s = size(idx2D);
+            idx2D  = idx2D(1:numel(idx2D));
+
+            % Convert to subscript indices (i,j)
+            [i, j] = ind2sub([nx, ny], idx2D);
+        case 'subscript'
+            i = idx2D(:,1);
+            j = idx2D(:,2);
+    end
     
     % Expand to all k values
     k = reshape(1:nz, 1, nz);  % [1 x nz]
@@ -247,7 +259,7 @@ function paddedImg = padWithObjectValues(img, mask, maskVal)
     if ndims(img) == 3 && ismatrix(mask)
         squeezeResult = 0;
         [nx,ny,nz] = size(img);
-        idx = expand2DIndicesTo3D(idx,nx,ny,nz,squeezeResult);
+        idx = expand2DIndicesTo3D(idx,nx,ny,nz,squeezeResult,'linear');
     end
 
     % Initialize result
@@ -283,7 +295,7 @@ function paddedImg = padWithObjectValuesLinIdx(img, linIdx)
     if ndims(img) == 3 && ismatrix(mask)
         squeezeResult = 0;
         [nx,ny,nz] = size(img);
-        idx = expand2DIndicesTo3D(idx,nx,ny,nz,squeezeResult);
+        idx = expand2DIndicesTo3D(idx,nx,ny,nz,squeezeResult,'linear');
     end
 
     % Initialize result
@@ -348,12 +360,12 @@ function [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask)
 end
 
 %%
-function smooth = smoothImg(img, numDim, filterHi, filterLo, psfSigma_xy)
-    if numDim == 3 || numDim == 2    
+function smooth = smoothImg(img, filterHi, filterLo, psfSigma_xy)
+    if ismember(ndims(img),[2,3])
         
         %factors 1.5 is a heuristic attempt to reproduce results
         %from the Fourier filter given the same parameters
-        smooth = 1.5 * DOGfilter(img, filterHi, filterLo * psfSigma_xy, 1,5);
+        smooth = 1.5 * DOGfilter2(img, filterHi, filterLo * psfSigma_xy, [],[]);
     else
         disp('data type error: smoothing only possible on 2d images or 3d stacks');
         smooth = 0;
@@ -420,12 +432,12 @@ function [m,s,m2,s2,idxList] = getMeanStdInMask(img,mask,maskVal,varargin)
     s2 = m2 - median(img(img <= m2));
 end
 
-function [m,s,m2,s2,idxList] = getMeanStdInMaskLinIdx(img,linIdx,varargin)
-    % computes summary statistics in an ROI of img.
+function [m,s,m2,s2,idxList] = getMeanStdInMaskLinIdx(img,idxList,varargin)
+    % computes summary statistics in an ROI of an img indexed by linIdx
+    
     % INPUT
     % img is the image
-    % mask is the mask
-    % maskVal is the value of the mask to use
+    % idxList is the list of linear indices that define the ROI
     
     % OPTIONAL
     % 'useMode': set to 1 to output the robust estimate of the mode for m2
@@ -448,8 +460,10 @@ function [m,s,m2,s2,idxList] = getMeanStdInMaskLinIdx(img,linIdx,varargin)
     % gathe optional args
     p = inputParser();
     p.addParameter('useMode',0);
+    p.addParameter('downSample',1);
     p.parse(varargin{:});
     useMode = p.Results.useMode;
+    downSample = p.Results.downSample;
     
     % this should have been checked upstream of this function call so
     % commenting it out
@@ -459,22 +473,22 @@ function [m,s,m2,s2,idxList] = getMeanStdInMaskLinIdx(img,linIdx,varargin)
     %     m = NaN; s = NaN;m2 = NaN; s2 = NaN;
     %     return
     % end
-    
-    idxList = getIdxInImgMatchingMaskValue(img,mask,maskVal);
-    img = img(idxList);
-    m = mean(img(:));
-    s = std(img(:));
+    img = img(idxList(1:ceil(downSample):numel(idxList))); % make sure this is a row vector
+    m = mean(img);
+    s = std(img);
     if useMode
         % assing m2 to the mode if option is chosen
         % number of bins used to compute the mode 
         % (these bins will map the 20th 80th percentile interval)
         nBins = 20;
-        m2 = estimateModeRobust(img(:),nBins);
+        m2 = estimateModeRobust(img,nBins);
+        s2 = m2 - median(img(img <= m2));
     else
         % assign m2 to median by default
-        m2 = median(img(:));
+        m2 = prctile(img,[0.25,0.5]);
+        s2 = m2(2) - m2(1);
+        m2 = m2(1);
     end   
-    s2 = m2 - median(img(img <= m2));
 end
 
 %%
@@ -678,23 +692,46 @@ function [croppedImg, dx, dy, dz, idxCrop, idxImg] = cropImageBasedOnMask(img, m
     
     % compute linear indices relative to the whole image
     if is3D && ismatrix(mask)
-        idxImg = expand2DIndicesTo3D(idxImg,nx,ny,nz,1);
+        
     end
 
     % compute linear indices relative to the mask
     if is3D
         if ismatrix(mask)
-            [x, y, z] = ind2sub([nx, ny, nz], idxImg);
+            idxCrop = expand2DIndicesTo3D(...
+            [reshape(x - xmin + 1, numel(x),1), ...
+             reshape(y - ymin + 1, numel(y),1)],...
+            nx,ny,nz,1,'subscript');
+        else
+
         end
         x = x - xmin + 1;
         y = y - ymin + 1;
         z = z - zmin + 1;
-        idxCrop = sub2ind(size(croppedImg),x,y,z);
+        idxCrop = sub2ind(size(croppedImg),x - xmin + 1,y - ymin + 1,z - zmin + 1);
     else
         x = x - xmin + 1;
         y = y - ymin + 1;
         idxCrop = sub2ind(size(croppedImg),x,y);
     end
 
+    % if is3D && ismatrix(mask)
+    %     idxImg = expand2DIndicesTo3D(idxImg,nx,ny,nz,1,'linear');
+    % end
+    % 
+    % % compute linear indices relative to the mask
+    % if is3D
+    %     if ismatrix(mask)
+    %         [x, y, z] = ind2sub([nx, ny, nz], idxImg);
+    %     end
+    %     x = x - xmin + 1;
+    %     y = y - ymin + 1;
+    %     z = z - zmin + 1;
+    %     idxCrop = sub2ind(size(croppedImg),x,y,z);
+    % else
+    %     x = x - xmin + 1;
+    %     y = y - ymin + 1;
+    %     idxCrop = sub2ind(size(croppedImg),x,y);
+    % end
 end
 

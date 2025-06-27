@@ -175,13 +175,13 @@ function idx = getIdxInImgMatchingMaskValue(img,mask,maskVal)
     idx2D = find(mask==maskVal);
     [nx, ny, nz] = size(img);
     squeezeResult = 1;
-    idx = expand2DIndicesTo3D(idx2D,nx,ny,nz,squeezeResult); 
+    idx = expand2DIndicesTo3D(idx2D,nx,ny,nz,squeezeResult,'linear'); 
     idx = idx(1:numel(idx));
 end
 
 %%
-function idx3D = expand2DIndicesTo3D(idx2D,nx,ny,nz,squeezeResult)
-    % from  an array of 2D linear indices relative to a matrix of size [nx,ny], 
+function idx3D = expand2DIndicesTo3D(idx2D,nx,ny,nz,squeezeResult,inputMode)
+    % from  an array of 2D linear indices (or x,y coordinates) relative to a matrix of size [nx,ny], 
     % generates an array of linear indices of all the voxels of the 3D array
     % (size [nx ny nz]) which 2D projection is a member of the list of 2D
     % linear indices.
@@ -189,12 +189,31 @@ function idx3D = expand2DIndicesTo3D(idx2D,nx,ny,nz,squeezeResult)
     % if the option squeezeResult has been selected, the dimensions of zie
     % 1 will be squeezed to return the lowest possible dimension array.
 
-    % map idx2D array to a vector
-    s = size(idx2D);
-    idx2D  = idx2D(1:numel(idx2D));
+    % INPUT
+    % idx2D either a list of linear indices (if inputMode = 'linear'), 
+        % or a 2D array or x y coordinates in 2 columns (if inputMode = 'subscript')
+    % nx,ny,nz is the size of the 3D array that the indices are replicated into
+    % squeezeResult is to ensure the dimensions of the result are squeezed.
 
-    % Convert to subscript indices (i,j)
-    [i, j] = ind2sub([nx, ny], idx2D);
+    % inputMode can be either: 
+        % 'linear': idx2D has the format of linear indices
+        % or 
+        % 'subscript': idx2D is a 2 column matrix with x and y coordinates 
+
+    % get list of x and y coordinates    
+    switch inputMode 
+        case 'linear'
+            % map idx2D array to a vector
+            s = size(idx2D);
+            idx2D  = idx2D(1:numel(idx2D));
+
+            % Convert to subscript indices (i,j)
+            [i, j] = ind2sub([nx, ny], idx2D);
+        case 'subscript'
+            i = idx2D(:,1);
+            j = idx2D(:,2);
+            s = size(idx2D(:,1));
+    end
     
     % Expand to all k values
     k = reshape(1:nz, 1, nz);  % [1 x nz]
@@ -241,7 +260,7 @@ function paddedImg = padWithObjectValues(img, mask, maskVal)
     if ndims(img) == 3 && ismatrix(mask)
         squeezeResult = 0;
         [nx,ny,nz] = size(img);
-        idx = expand2DIndicesTo3D(idx,nx,ny,nz,squeezeResult);
+        idx = expand2DIndicesTo3D(idx,nx,ny,nz,squeezeResult,'linear');
     end
 
     % Initialize result
@@ -277,7 +296,7 @@ function paddedImg = padWithObjectValuesLinIdx(img, linIdx)
     if ndims(img) == 3 && ismatrix(mask)
         squeezeResult = 0;
         [nx,ny,nz] = size(img);
-        idx = expand2DIndicesTo3D(idx,nx,ny,nz,squeezeResult);
+        idx = expand2DIndicesTo3D(idx,nx,ny,nz,squeezeResult,'linear');
     end
 
     % Initialize result
@@ -674,22 +693,42 @@ function [croppedImg, dx, dy, dz, idxCrop, idxImg] = cropImageBasedOnMask(img, m
     
     % compute linear indices relative to the whole image
     if is3D && ismatrix(mask)
-        idxImg = expand2DIndicesTo3D(idxImg,nx,ny,nz,1);
+        
     end
 
     % compute linear indices relative to the mask
     if is3D
         if ismatrix(mask)
-            [x, y, z] = ind2sub([nx, ny, nz], idxImg);
+            idxCrop = expand2DIndicesTo3D(...
+            [reshape(x - xmin + 1, numel(x),1), ...
+             reshape(y - ymin + 1, numel(y),1)],...
+            size(croppedImg,1),size(croppedImg,2),nz,1,'subscript');
+        else
+            idxCrop = sub2ind(size(croppedImg),...
+            x - xmin + 1,y - ymin + 1,z - zmin + 1);
         end
-        x = x - xmin + 1;
-        y = y - ymin + 1;
-        z = z - zmin + 1;
-        idxCrop = sub2ind(size(croppedImg),x,y,z);
     else
-        x = x - xmin + 1;
-        y = y - ymin + 1;
-        idxCrop = sub2ind(size(croppedImg),x,y);
+        idxCrop = sub2ind(size(croppedImg),...
+            x - xmin + 1,y - ymin + 1);
     end
+
+    % if is3D && ismatrix(mask)
+    %     idxImg = expand2DIndicesTo3D(idxImg,nx,ny,nz,1,'linear');
+    % end
+    % 
+    % % compute linear indices relative to the mask
+    % if is3D
+    %     if ismatrix(mask)
+    %         [x, y, z] = ind2sub([nx, ny, nz], idxImg);
+    %     end
+    %     x = x - xmin + 1;
+    %     y = y - ymin + 1;
+    %     z = z - zmin + 1;
+    %     idxCrop = sub2ind(size(croppedImg),x,y,z);
+    % else
+    %     x = x - xmin + 1;
+    %     y = y - ymin + 1;
+    %     idxCrop = sub2ind(size(croppedImg),x,y);
+    % end
 end
 

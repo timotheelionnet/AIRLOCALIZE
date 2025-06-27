@@ -7,18 +7,17 @@ function [Idog,dog] = DOGfilter2(I,s1,s2,padSize,kernSize)
     %padsize: size of padding (in pixels) added to the image; default = 30;
     %kernsize: size of convolution kernel; default = 21;
     
-    % default size of the kernel set to encompass most of the main peak of the
+    % default size of the kernel should encompass the main peak of the
     % kernel
     if isempty(kernSize)
-        kernSize = round(3*s2 + 1);
-        if mod(kernSize,2) == 0
-            kernSize = kernSize + 1;
-        end
+        kernSize = 3*s2 + 1;
     end
     
-    % default padding ~ half the size of the kernel
     if isempty(padSize)
-        padSize = floor(kernSize/4); 
+        padSize = floor(kernSize/2);
+        if mod(padSize,2) == 0
+            padSize = padSize + 1;
+        end
     end
     
     g1 = fspecial('Gaussian', kernSize, s1);

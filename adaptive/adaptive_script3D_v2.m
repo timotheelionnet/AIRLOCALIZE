@@ -53,7 +53,7 @@ img = timtiffread(imgName);
 mask = timtiffread(maskName);
 %%
 start0 = tic;
-smooth = smooth_image_and_subtract_background10(img,params1m,'mask',mask);
+smooth = smooth_image_and_subtract_background10(img,params1m,'mask',mask,'paddingSize',5);
 t = toc(start0)
 %%
 save_as_tiff(smooth,'/Users/lionnt01/Documents/junk/testSmooth.tif');
