@@ -120,7 +120,7 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
         % get mean & std of intensity over the mask region
         t4 = tic;
         %[~,s,m2,s2] = getMeanStdInMask(cs,croppedMask,true);
-        [~,s,m2,s2] = getMeanStdInMaskLinIdx(cs,idxCrop);
+        [~,s,m2,s2] = getMeanStdInMaskLinIdx(cs,idxCrop,'downSample',10);
         t(i,4) = toc(t4);
         
         % subtract the mode within the mask, and divide by the estimate of
@@ -442,8 +442,10 @@ function [m,s,m2,s2,idxList] = getMeanStdInMaskLinIdx(img,idxList,varargin)
     % gathe optional args
     p = inputParser();
     p.addParameter('useMode',0);
+    p.addParameter('downSample',1);
     p.parse(varargin{:});
     useMode = p.Results.useMode;
+    downSample = p.Results.downSample;
     
     % this should have been checked upstream of this function call so
     % commenting it out
@@ -453,7 +455,7 @@ function [m,s,m2,s2,idxList] = getMeanStdInMaskLinIdx(img,idxList,varargin)
     %     m = NaN; s = NaN;m2 = NaN; s2 = NaN;
     %     return
     % end
-    img = img(idxList(1:numel(idxList))); % make sure this is a row vector
+    img = img(idxList(1:ceil(downSample):numel(idxList))); % make sure this is a row vector
     m = mean(img);
     s = std(img);
     if useMode
@@ -689,6 +691,5 @@ function [croppedImg, dx, dy, dz, idxCrop, idxImg] = cropImageBasedOnMask(img, m
         y = y - ymin + 1;
         idxCrop = sub2ind(size(croppedImg),x,y);
     end
-
 end
 
