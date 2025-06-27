@@ -38,11 +38,12 @@ function smooth = smooth_image_and_subtract_background10(img,params,varargin)
         % of fluorescence intensities.
         % smooth is set to zero in the pixels forming the background of the
         % mask.
+     
     p = inputParser();
     addParameter(p,'mask',[]);
     addParameter(p,'eliminateBackgroundROIs',1);    
     addParameter(p,'backgroundID',0);    
-    addParameter(p,'paddingSize',0);    
+    addParameter(p,'paddingSize',1);    
     
     parse(p,varargin{:});
     mask = p.Results.mask;
@@ -60,6 +61,12 @@ function smooth = smooth_image_and_subtract_background10(img,params,varargin)
         smooth = smooth - mean(smooth(:));
     else
         disp('smoothing image and normalizing intensity in masks...'); 
+        % check that image and mask have compativel dimensions/sizes
+        [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask);
+        if errorFlag
+            smooth = [];
+            return
+        end
         smooth = smoothInMasks(img,mask,...
             params.filterHi, params.filterLo,params.psfSigma(1),...
             eliminateBackgroundROIs,backgroundID,paddingSize);
@@ -82,10 +89,13 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
     
     %% loop through masks
     smooth = zeros(size(img));
+    t = zeros(nm,10);
     for i=1:nm 
         % crop rectangle ROI around mask 
+        t1 = tic;
         [croppedImg,dx,dy,dz] = cropImageBasedOnMask(...
             img, mask, mList(i), paddingSize);
+        t(i,1) = toc(t1);
         if nd == 3 
             if ismatrix(mask)
                 % if image is 3D but mask is 2D, replicate the mask across
@@ -104,35 +114,57 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
         
         % set the background around the mask to the value of the closest pixel
         % within the image - this mitigates boundary artefacts.
+        t2 = tic;
         croppedImg = padWithObjectValues(croppedImg, croppedMask, mList(i));
+        t(i,2) = toc(t2);
         
         % smooth the cropped image
-        croppedSmooth = smoothImg(croppedImg, nd, filterHi, filterLo, psfSigma_xy);
+        t3 = tic;
+        cs = smoothImg(croppedImg, nd, filterHi, filterLo, psfSigma_xy);
+        t(i,3) = toc(t3);
         
         % get mean & std of intensity over the mask region
-        [~,s,m2,s2] = getMeanStdInMask(croppedSmooth,croppedMask,mList(i));
+        t4 = tic;
+        [~,s,m2,s2,idxList] = getMeanStdInMask(cs,croppedMask,mList(i));
+        t(i,4) = toc(t4);
         
         % subtract the mode within the mask, and divide by the estimate of
         % the STD
+        croppedSmooth = zeros(size(cs));
+        croppedSmooth(idxList) = cs(idxList);
+        croppedSmooth(~idxList) = 0;
         croppedSmooth = ( croppedSmooth - max(0,m2) ) / ((s2+s)/2);
-        croppedSmooth(isinf(croppedSmooth)) = 0; % avoid any infinites
-        croppedSmooth(croppedSmooth<0) = 0;
+        croppedSmooth(isinf(croppedSmooth) | croppedSmooth<0) = 0; % avoid any infinites, negatives
         
         % reassign pixels in the large image to the smoothed/normalized
         % values
-        idxList = getIdxInImgMatchingMaskValue(...
-                        croppedSmooth,croppedMask,mList(i));
+        t5 = tic;
+        %%%%%%%%
         if nd==2
-            [x,y] = ind2sub(size(croppedSmooth),idxList);
-            x = x + dx -1; y = y + dy -1; 
-            newIdxList = sub2ind(size(smooth),x,y);
+            [nx, ny] = size(cs);
+            smooth(dx:dx+nx-1,dy:dy+ny-1) = smooth(dx:dx+nx-1,dy:dy+ny-1) ...
+                + croppedSmooth;
         else
-            [x,y,z] = ind2sub(size(croppedSmooth),idxList);
-            x = x + dx -1; y = y + dy -1; z = z + dz -1;
-            newIdxList = sub2ind(size(smooth),x,y,z);
+            [nx, ny, nz] = size(cs);
+            smooth(dx:dx+nx-1,dy:dy+ny-1,dz:dz+nz-1) = ...
+                smooth(dx:dx+nx-1,dy:dy+ny-1,dz:dz+nz-1) ...
+                + croppedSmooth;
         end
-        smooth(newIdxList) = croppedSmooth(idxList);
+        %%%%%%%%
+        % if nd==2
+        %     [x,y] = ind2sub(size(croppedSmooth),idxList);
+        %     x = x + dx -1; y = y + dy -1; 
+        %     newIdxList = sub2ind(size(smooth),x,y);
+        % else
+        %     [x,y,z] = ind2sub(size(croppedSmooth),idxList);
+        %     x = x + dx -1; y = y + dy -1; z = z + dz -1;
+        %     newIdxList = sub2ind(size(smooth),x,y,z);
+        % end
+        % smooth(newIdxList) = croppedSmooth(idxList);
+        %%%%%%%%
+        t(i,5) = toc(t5);
     end
+    sum(t)
 end
 
 %%
@@ -144,11 +176,13 @@ function idx = getIdxInImgMatchingMaskValue(img,mask,maskVal)
 % If img is 3D and mask is 2D, returns the indices of all the voxels of img 
 % which x,y match maskVal when projected vertically onto mask.
     
-    [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask);
-    if errorFlag == 1
-        idx = [];
-        return
-    end
+    % this should have been checked upstream of this function call so 
+    % commenting it out
+    % [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask);
+    % if errorFlag == 1
+    %     idx = [];
+    %     return
+    % end
     
     % trivial case when image and mask have the same sizes
     if isequal(size(img),size(mask))
@@ -206,15 +240,16 @@ end
 %%
 function paddedImg = padWithObjectValues(img, mask, maskVal)
     
-    % check that size and dimensions of img and mask are compatible 
-    [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask);
-    if errorFlag == 1
-        paddedImg = [];
-        return
-    end
+    % this should have been checked upstream of this function call so
+    % commenting it out
+    % % check that size and dimensions of img and mask are compatible 
+    % [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask);
+    % if errorFlag == 1
+    %     paddedImg = [];
+    %     return
+    % end
 
     % Ensure mask is logical
-    img = double(img);
     mask = (mask == maskVal);
 
     % Compute distance transform and index of nearest object pixel
@@ -296,7 +331,7 @@ function smooth = smoothImg(img, numDim, filterHi, filterLo, psfSigma_xy)
         
         %factors 1.5 is a heuristic attempt to reproduce results
         %from the Fourier filter given the same parameters
-        smooth = 1.5*DOGfilter(img, filterHi, filterLo * psfSigma_xy, [],[]);
+        smooth = 1.5 * DOGfilter(img, filterHi, filterLo * psfSigma_xy, 1,5);
     else
         disp('data type error: smoothing only possible on 2d images or 3d stacks');
         smooth = 0;
@@ -305,35 +340,62 @@ function smooth = smoothImg(img, numDim, filterHi, filterLo, psfSigma_xy)
 end
 
 %%
-function [m,s,m2,s2] = getMeanStdInMask(img,mask,maskVal)
+function [m,s,m2,s2,idxList] = getMeanStdInMask(img,mask,maskVal,varargin)
     % uses an ROI of ID value maskVal in the reference mask array mask to
     % compute summary statistics in the matching pixels/voxels of img.
-    % Outputs the mean (m), std (s), 
-    % the robust estimate of the mode (m2), 
-    % and the pseudo std (s2) which is obtained as m2 - median( pixels with values below m2)
+    % INPUT
+    % img is the image
+    % mask is the mask
+    % maskVal is the value of the mask to use
+    
+    % OPTIONAL
+    % 'useMode': set to 1 to output the robust estimate of the mode for m2
+    % instead of the median (Default is zero, output m2 = median).
+
+    % OUTPUT
+    % m: mean of pixels that belonw to the mask
+    % s: std of pixels that belonw to the mask
+    % m2: median of pixels that belonw to the mask
+    % s2: pseudo std of pixels that belonw to the mask
+        % computed as m2 - median( pixels with values below m2)
+    % idxList: list of linear indices of the image voxels that fall under
+        % the mask
+
     % the function handles img and mask having the same size, 
     % or img being 3D and mask being 2D, in which case all img voxels that project
     % vertically onto the ROI in the mask are included in the summary
     % statistics.
-
-    % check dimensions compatibility
-    [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask);
-    if errorFlag ==1
-        m = NaN; s = NaN;m2 = NaN; s2 = NaN;
-        return
-    end
     
-    % number of bins used to compute the mode 
-    % (these bins will map the 20th 80th percentile interval)
-    nBins = 20;
+    % gathe optional args
+    p = inputParser();
+    p.addParameter('useMode',0);
+    p.parse(varargin{:});
+    useMode = p.Results.useMode;
     
-    idx = getIdxInImgMatchingMaskValue(img,mask,maskVal);
-    img = img(idx);
+    % this should have been checked upstream of this function call so
+    % commenting it out
+    % % check size/dimensions compatibility between img and mask
+    % [errorFlag,mask] = checkImgMaskSizeDimMismatch(img,mask);
+    % if errorFlag ==1
+    %     m = NaN; s = NaN;m2 = NaN; s2 = NaN;
+    %     return
+    % end
+    
+    idxList = getIdxInImgMatchingMaskValue(img,mask,maskVal);
+    img = img(idxList);
     m = mean(img(:));
     s = std(img(:));
-    m2 = estimateModeRobust(img(:),nBins);
+    if useMode
+        % assing m2 to the mode if option is chosen
+        % number of bins used to compute the mode 
+        % (these bins will map the 20th 80th percentile interval)
+        nBins = 20;
+        m2 = estimateModeRobust(img(:),nBins);
+    else
+        % assign m2 to median by default
+        m2 = median(img(:));
+    end   
     s2 = m2 - median(img(img <= m2));
-
 end
 
 %%
@@ -350,7 +412,9 @@ function xMode = estimateModeRobust(d,nBins)
 
     % generates a binning grid so that there are nBins between the 20th and
     % 80th percentile of the dataset data.
-    binEdges = computeRobustHistBins(d,nBins); 
+    d = d(d > prctile(d,0.3) & d < prctile(d,0.7));
+    trimDist = 1;
+    [binEdges,d] = computeRobustHistBins(d,nBins,trimDist); 
     [n,x] = hist(d,binEdges);
     % truncate the first and last datapoint to avoid picking up the edge bin in the case of
     % long tailed distribtions
@@ -367,6 +431,23 @@ function xMode = estimateModeRobust(d,nBins)
     nw = n(idxw);
     xw = x(idxw);
     [xMode,~] = findQuadMax2(nw',xw');
+end
+
+%%
+function m = robustModeKernel(d)
+    
+    % Remove NaNs or Infs
+    d = d(~isnan(d) & isfinite(d));
+    if isempty(d)
+        m = NaN;
+        return;
+    end
+
+    % Use Gaussian KDE
+    [f, xi] = ksdensity(d, 'Bandwidth', 1.06*std(d)*numel(d)^(-1/5));  % Silverman's rule of thumb
+    % Find mode as maximum of density
+    [~, idx] = max(f);
+    m = xi(idx);
 end
 
 %% find approximate x,y coordinate of local max
@@ -411,7 +492,7 @@ function [xMax, yMax] = findQuadMax2(y,x)
 end
 
 %%
-function binEdges = computeRobustHistBins(data,nBins)
+function [binEdges, data] = computeRobustHistBins(data,nBins,trimDist)
     % generates a binning grid so that there are nBins between the 20th and
     % 80th percentile of the dataset data.
 
@@ -420,6 +501,9 @@ function binEdges = computeRobustHistBins(data,nBins)
 
     % This approach ensure robust sampling of the mode of the distribution 
     % even for long-tailed distributions.
+
+    % outputs the data trimmed from the outliers outside of the 20th and
+    % 80th percentile.
 
     % max number of bins
     nMax = 1000;
@@ -432,6 +516,10 @@ function binEdges = computeRobustHistBins(data,nBins)
     
     % split that range into nBins
     binSize = (p80-p20)/nBins;
+
+    if trimDist
+        data = data(data>=p20 & data<=p80);
+    end
     
     % Define bin edges (n equal-sized bins)
     if (max(data) - min(data))/binSize <= nMax
