@@ -14,16 +14,21 @@
 imgName = '/Users/lionnt01/Documents/junk/3D_stack_example.tif';
 maskName = '/Users/lionnt01/Documents/junk/3D_stack_example_mask_lbl.tif';
 
-
+% nestor
 imgName = ['/Users/lionnt01/Documents/data/Nestor_for_Tim/AIRLOCALIZE_test/z_stacks_channel1/',...
     '02112025_Cen-ZF_select_HCT116_NT-GFP_Cen7-ZF1g_1_MMStack_Pos1.ome.tif - C=0-1.tif'];
 maskName = ['/Users/lionnt01/Documents/data/Nestor_for_Tim/AIRLOCALIZE_test/nuclei_masks/',...
     'C1-02112025_Cen-ZF_select_HCT116_NT-GFP_Cen7-ZF1g_1_MMStack_Pos1_MIP_cp_masks.tif'];
+
+% minghan
+imgName = '/Users/lionnt01/Documents/data/v1_adaptive/img_channel001_position002_time000000000.tif';
+maskName = ['/Users/lionnt01/Documents/data/v1_adaptive_mask/',...
+    'MAX_img_channel001_position002_time000000000_cp_masks.tif'];
 %% settings
 % key parameter: size of the psf in pixel units 
 % should be scalar for 2D image data / should be 2D for 3D z-stacks ([sigma_xy, sigma_z])
 psfSigma = [1.3,2];
-psfSigma = [2.3,3];
+%psfSigma = [2.3,3]; % nestor setting
 
 % key parameter: factor that will be multiplied to the std of the mask
 % (recommended: 6)

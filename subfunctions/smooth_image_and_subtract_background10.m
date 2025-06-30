@@ -43,7 +43,7 @@ function smooth = smooth_image_and_subtract_background10(img,params,varargin)
     addParameter(p,'mask',[]);
     addParameter(p,'eliminateBackgroundROIs',1);    
     addParameter(p,'backgroundID',0);    
-    addParameter(p,'paddingSize',1);    
+    addParameter(p,'paddingSize',5);    
     
     parse(p,varargin{:});
     mask = p.Results.mask;
