@@ -146,10 +146,17 @@ function params = set_detection_mode4(params)
                         'Position',[12.5,1,20,2]);
     handles = guihandles(fh);
     set(hnext,'Callback',{@get_mode,fh,hsel_mode});                
-    set(hcancel,'Callback',{@cancel,fh});                
+    set(hcancel,'Callback',{@cancel,fh});  
+    set(fh, 'KeyPressFcn', {@onKeyPress,fh,hsel_mode});
 
-%% nested callback function
-    function get_mode(src,eventdata,fh,hsel_mode)
+%% callback functions
+function onKeyPress(src,eventdata,fh,hsel_mode)
+    if strcmp(eventdata.Key, 'return') || strcmp(eventdata.Key, 'enter')
+        get_mode(src,eventdata,fh,hsel_mode);
+    end
+end
+
+function get_mode(src,eventdata,fh,hsel_mode)
         
         xtag = get(get(hsel_mode,'SelectedObject'), 'Tag');
 

@@ -401,6 +401,7 @@ hcancel = uicontrol('Parent',fh,'Units','characters',...
 set(hnext,'Callback',{@next,fh});                
 set(hcancel,'Callback',{@cancel,fh});               
 set(fh,'Visible','on');
+set(fh, 'KeyPressFcn', {@onKeyPress,fh});
 
 uiwait;
 
@@ -413,69 +414,74 @@ end
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function onKeyPress(src,eventdata,fh)
+    if strcmp(eventdata.Key, 'return') || strcmp(eventdata.Key, 'enter')
+        next(src,eventdata,fh);
+    end
+end
 
 function next(src,eventdata,fh)
-p = getappdata(fh,'params');
-handles = guihandles(fh);
-
-% psf parameters
-p.psfSigma(1) = str2double(get(handles.hsxy,'String'));
-if p.numDim == 3
-     p.psfSigma(2) = str2double(get(handles.hsz,'String'));
-end
-p.setPsfInteractively = get(handles.hpsf_manual,'Value');
-
-% threshold parameters
-str_thr = get(get(handles.hthresh_units,'SelectedObject'),'Tag');   
-if  strcmp(str_thr,'Absolute') 
-    p.threshUnits = 'absolute';
-elseif strcmp(str_thr,'SD') 
-    p.threshUnits = 'SD';
-elseif strcmp(str_thr,'legacySD') 
-    p.threshUnits = 'legacySD';
-end
-p.threshLevel = str2double( get(handles.hthresh_level,'String') );
-p.setThreshInteractively = get(handles.hthresh_manually,'Value');
-
-% saving paramters
-p.saveDirName = get(handles.hsave,'String');
-p.outputSpotsImage  = get(handles.houtput_spot_img,'Value');
-p.autoSpotSize = get(handles.hautoSpotSize  ,'Value');
-p.useLegacyFormats = get(handles.hLegacy  ,'Value');
-p.spotSize(1) = str2double( get(handles.hSpotSizexy   ,'String') );
-if p.numDim == 3
-    p.spotSize(1) = str2double( get(handles.hSpotSizez   ,'String') );
-end
-p.autoSpotIntensity = get(handles.hautoInt  ,'Value');
-p.spotIntensity = str2double( get(handles.hSpotInt   ,'String') );
-
-
-%advanced parameters
-%detection
-p.filterLo = str2double( get(handles.hfilter_nlo,'String') ); 
-p.filterHi = str2double( get(handles.hfilter_nhi,'String') ); 
-p.minDistBetweenSpots = str2double(get(handles.hROIsize,'String'));
-p.maxSpots = str2double( get(handles.hmax_spots,'String')); 
-
-% quantification
-psfTypes = get(handles.htype,'String');
-p.psfType = psfTypes{get(handles.htype,'Value')};
-
-method = get(handles.hmethod,'String');
-p.fitMethod = method{get(handles.hmethod,'Value')};
-
-bgstr = get(handles.hbg_mode,'String');
-p.bgCorrectionMode = bgstr{get(handles.hbg_mode,'Value')};
-
-p.fittedRegionSize = str2double(get(handles.hcutsize,'String')); 
-p.bgRegionThickness = str2double(get(handles.hthickness,'String'));
-p.maxIterations = str2double(get(handles.hmaxcount,'String'));
-
-setappdata(fh,'params',p);
-
-%% housekeeping
-clear('p','handles','method','bgstr');
-uiresume
+    p = getappdata(fh,'params');
+    handles = guihandles(fh);
+    
+    % psf parameters
+    p.psfSigma(1) = str2double(get(handles.hsxy,'String'));
+    if p.numDim == 3
+         p.psfSigma(2) = str2double(get(handles.hsz,'String'));
+    end
+    p.setPsfInteractively = get(handles.hpsf_manual,'Value');
+    
+    % threshold parameters
+    str_thr = get(get(handles.hthresh_units,'SelectedObject'),'Tag');   
+    if  strcmp(str_thr,'Absolute') 
+        p.threshUnits = 'absolute';
+    elseif strcmp(str_thr,'SD') 
+        p.threshUnits = 'SD';
+    elseif strcmp(str_thr,'legacySD') 
+        p.threshUnits = 'legacySD';
+    end
+    p.threshLevel = str2double( get(handles.hthresh_level,'String') );
+    p.setThreshInteractively = get(handles.hthresh_manually,'Value');
+    
+    % saving paramters
+    p.saveDirName = get(handles.hsave,'String');
+    p.outputSpotsImage  = get(handles.houtput_spot_img,'Value');
+    p.autoSpotSize = get(handles.hautoSpotSize  ,'Value');
+    p.useLegacyFormats = get(handles.hLegacy  ,'Value');
+    p.spotSize(1) = str2double( get(handles.hSpotSizexy   ,'String') );
+    if p.numDim == 3
+        p.spotSize(1) = str2double( get(handles.hSpotSizez   ,'String') );
+    end
+    p.autoSpotIntensity = get(handles.hautoInt  ,'Value');
+    p.spotIntensity = str2double( get(handles.hSpotInt   ,'String') );
+    
+    
+    %advanced parameters
+    %detection
+    p.filterLo = str2double( get(handles.hfilter_nlo,'String') ); 
+    p.filterHi = str2double( get(handles.hfilter_nhi,'String') ); 
+    p.minDistBetweenSpots = str2double(get(handles.hROIsize,'String'));
+    p.maxSpots = str2double( get(handles.hmax_spots,'String')); 
+    
+    % quantification
+    psfTypes = get(handles.htype,'String');
+    p.psfType = psfTypes{get(handles.htype,'Value')};
+    
+    method = get(handles.hmethod,'String');
+    p.fitMethod = method{get(handles.hmethod,'Value')};
+    
+    bgstr = get(handles.hbg_mode,'String');
+    p.bgCorrectionMode = bgstr{get(handles.hbg_mode,'Value')};
+    
+    p.fittedRegionSize = str2double(get(handles.hcutsize,'String')); 
+    p.bgRegionThickness = str2double(get(handles.hthickness,'String'));
+    p.maxIterations = str2double(get(handles.hmaxcount,'String'));
+    
+    setappdata(fh,'params',p);
+    
+    %% housekeeping
+    clear('p','handles','method','bgstr');
+    uiresume
 end
 
 function cancel(src,eventdata,fh)

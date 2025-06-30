@@ -38,6 +38,9 @@ xfreeze = round(nx/2);
 yfreeze = round(ny/2); 
 setappdata(fh,'xfreeze',xfreeze);
 setappdata(fh,'yfreeze',yfreeze);
+setappdata(fh,'hIminVal',min(alData.img(:)));
+setappdata(fh,'hImaxVal',max(alData.img(:)));
+setappdata(fh,'hthresh_levelVal',params.threshLevel);
 thresh = struct();
 thresh.level = params.threshLevel;
 thresh.units = params.threshUnits;
@@ -196,8 +199,7 @@ function update_threshold(src,eventdata,fh,alData,params)
     
     % update the threshold value from GUI
     thresh = getappdata(fh,'thresh');
-    thresh.level = str2double(get(handles.hthresh_level,'String'));
-    
+    thresh.level = getCleanNumberFromEditEntry(handles,'hthresh_level',fh,'hthresh_levelVal');
     % update the threshold units from GUI
     str_units = get(get(handles.hthresh_units,'SelectedObject'),'Tag');
     % if user selects adaptive but this wasnt set up in the parameters,
@@ -346,73 +348,72 @@ end
 
 function plot_current_z_stack_two_channels(fh,alData,z)
 
-thresh = getappdata(fh,'thresh');
-if strcmp(thresh.units,'absolute') || strcmp(thresh.units,'adaptive')
-    threshInt = thresh.level;
-elseif strcmp(thresh.units,'SD') || strcmp(thresh.units,'legacySD')
-    threshInt = thresh.level*thresh.sd;
-end
-
-handles = guihandles(fh);    
-%% parsing dimensions of input stack   
-nd = ndims(alData.img);
-if nd == 3
-    [nx, ny, nz] = size(alData.img);
-    if z<=0 || z >nz
-        disp('z out of bounds in plot_current_z_stack!');
+    thresh = getappdata(fh,'thresh');
+    if strcmp(thresh.units,'absolute') || strcmp(thresh.units,'adaptive')
+        threshInt = thresh.level;
+    elseif strcmp(thresh.units,'SD') || strcmp(thresh.units,'legacySD')
+        threshInt = thresh.level*thresh.sd;
     end
-elseif nd == 2
-    [nx, ny] = size(alData.img);
-else
-    disp('wrong stack size');
-end
-
-Imin = str2double(get(handles.hImin,'String'));
-Imax = str2double(get(handles.hImax,'String'));
     
-    
-%% filling data 
-curSlice = zeros(nx,ny,3);
-
-%red channel: overlay or nothing
-is_overlay_on = 1 - get(handles.hoverlay,'Value');
-if ~is_overlay_on
-    threshInt = Inf;
-end
-
-if nd == 3 
-    curSlice(:,:,1) = alData.smooth(:,:,z)>threshInt;
-else
-    curSlice(:,:,1) = alData.smooth(:,:)>threshInt;
-end
-
-%green channel: data
-if(Imin >= Imax)
-    curSlice(:,:,2) = 0;
-else
+    handles = guihandles(fh);    
+    %% parsing dimensions of input stack   
+    nd = ndims(alData.img);
     if nd == 3
-        curSlice(:,:,2) = ...
-            min( max(( alData.img(:,:,z) -Imin)/(Imax-Imin),0) , 1);
+        [nx, ny, nz] = size(alData.img);
+        if z<=0 || z >nz
+            disp('z out of bounds in plot_current_z_stack!');
+        end
+    elseif nd == 2
+        [nx, ny] = size(alData.img);
     else
-        curSlice(:,:,2) = ...
-            min( max(( alData.img(:,:) -Imin)/(Imax-Imin),0) , 1);
+        disp('wrong stack size');
     end
-end
-
-%nothing in the blue channel
-curSlice(:,:,3) = 0; 
-
-%%    
-ha = handles.ha;
-imagesc(ha,curSlice); 
-xlim(ha,[1,max(nx,ny)]);
-ylim(ha,[1,max(nx,ny)]);
-defaultBackgroundColor = getappdata(fh,'defaultBackgroundColor');
-set(ha,'Color',defaultBackgroundColor);
-set(ha,'Tag','ha');
+      
+    Imin = getCleanNumberFromEditEntry(handles,'hImin',fh,'hIminVal');
+    Imax = getCleanNumberFromEditEntry(handles,'hImax',fh,'hImaxVal');
     
-clear('cur_slice','nx','ny','nz','Imin','Imax','newXLim','newYLim','stack1');
-clear('stack2','handles','ha','thresh','threshInt','is_overlay_on');
+    %% filling data 
+    curSlice = zeros(nx,ny,3);
+    
+    %red channel: overlay or nothing
+    is_overlay_on = 1 - get(handles.hoverlay,'Value');
+    if ~is_overlay_on
+        threshInt = Inf;
+    end
+    
+    if nd == 3 
+        curSlice(:,:,1) = alData.smooth(:,:,z)>threshInt;
+    else
+        curSlice(:,:,1) = alData.smooth(:,:)>threshInt;
+    end
+    
+    %green channel: data
+    if(Imin >= Imax)
+        curSlice(:,:,2) = 0;
+    else
+        if nd == 3
+            curSlice(:,:,2) = ...
+                min( max(( alData.img(:,:,z) -Imin)/(Imax-Imin),0) , 1);
+        else
+            curSlice(:,:,2) = ...
+                min( max(( alData.img(:,:) -Imin)/(Imax-Imin),0) , 1);
+        end
+    end
+    
+    %nothing in the blue channel
+    curSlice(:,:,3) = 0; 
+    
+    %%    
+    ha = handles.ha;
+    imagesc(ha,curSlice); 
+    xlim(ha,[1,max(nx,ny)]);
+    ylim(ha,[1,max(nx,ny)]);
+    defaultBackgroundColor = getappdata(fh,'defaultBackgroundColor');
+    set(ha,'Color',defaultBackgroundColor);
+    set(ha,'Tag','ha');
+        
+    clear('cur_slice','nx','ny','nz','Imin','Imax','newXLim','newYLim','stack1');
+    clear('stack2','handles','ha','thresh','threshInt','is_overlay_on');
 end
 
 function plot_zoom_two_channels(x,y,z,width,alData,fh)
@@ -437,9 +438,9 @@ function plot_zoom_two_channels(x,y,z,width,alData,fh)
         [nx, ny] = size(alData.img);
     end
     
-    Imin = str2double(get(handles.hImin,'String'));
-    Imax = str2double(get(handles.hImax,'String'));
-
+    Imin = getCleanNumberFromEditEntry(handles,'hImin',fh,'hIminVal');
+    Imax = getCleanNumberFromEditEntry(handles,'hImax',fh,'hImaxVal');
+    
 %% computing the value of the local slice 
     
     curSlice = zeros(nx,ny,3);
@@ -543,6 +544,51 @@ function plot_zoom_two_channels(x,y,z,width,alData,fh)
     clear('cur_slice','nx','ny','nz','Imin','Imax','is_overlay_on','stack1','stack2');
     clear('xx','yy','handles','thresh','threshInt','zoomh');
     clear('x','y','z','width','zoomh','stack1','stack2','fh','hImin','hImax','hoverlay');
+end
+
+function nOut = getCleanNumberFromEditEntry(handles,tagName,fh,valName)
+    % reads the String field of a 'text' object with 'tagName' from the
+        % handles 'handles.
+        % cleans up the string and converts to a numeral nOut. Sets the
+        % appdata property 'valName' of fh to nOut.
+        % if nOut is NaN, reverts nOut to the value stored in the 'valName'
+        % property of fh.
+
+    strIn = get(handles.(tagName),'String');
+    
+    % ensures any non-numeric characters that were entered accidentally via hotkeys 
+    % are eliminated
+    strIn = regexprep(strIn, '[^0-9.]', '');
+    
+    % remove all dots except the leftmost one 
+    % Find indices of all dots
+    dotIdx = strfind(strIn, '.');
+    
+    % If more than one dot, remove all except the first
+    if numel(dotIdx) > 1
+        remove = dotIdx(2:end);
+    elseif isscalar(dotIdx)
+        if dotIdx(1) == length(strIn)
+            remove = dotIdx;
+        else
+            remove = [];
+        end
+    else
+        remove = [];
+    end
+    strIn(remove) = [];  % remove unwanted dots
+
+    set(handles.(tagName),'String',strIn); % clean up entry if needed
+    strIn = get(handles.(tagName),'String');
+    % Set selection to the end of the string
+    nOut = str2double(strIn);
+    if ~isnan(nOut)
+        setappdata(fh,valName,nOut);
+    else
+        % revert to previously vetted value of the entry
+        nOut = getappdata(fh,valName);
+        set(handles.(tagName),'String',num2str(nOut));
+    end
 end
 
 function change_local_range(src,eventdata,alData,fh)

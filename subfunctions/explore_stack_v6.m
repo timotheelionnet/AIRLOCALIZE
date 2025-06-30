@@ -27,7 +27,8 @@ setappdata(fh,'xfreeze',xfreeze);
 setappdata(fh,'yfreeze',yfreeze);
 setappdata(fh,'fitres',[0,0,0,0,0,0,0]);
 setappdata(fh,'defaultBackgroundColor','k');
-
+setappdata(fh,'hIminVal',min(alData.img(:)));
+setappdata(fh,'hImaxVal',max(alData.img(:)));
 fh = set_figure_and_panel_for_explore_stack(fh,alData);
 handles = guihandles(fh);
 
@@ -178,8 +179,8 @@ handles = guihandles(fh);
         disp('wrong stack size');
     end
     
-    Imin = str2double(get(handles.hImin,'String'));
-    Imax = str2double(get(handles.hImax,'String'));
+    Imin = getCleanNumberFromEditEntry(handles,'hImin',fh,'hIminVal');
+    Imax = getCleanNumberFromEditEntry(handles,'hImax',fh,'hImaxVal');
 
 %% filling data 
 
@@ -205,6 +206,51 @@ clear('cur_slice','nx','ny','nz','Imin','Imax','newXLim','newYLim','stack1');
 clear('stack1','handles','ha');
 end
 
+function nOut = getCleanNumberFromEditEntry(handles,tagName,fh,valName)
+    % reads the String field of a 'text' object with 'tagName' from the
+        % handles 'handles.
+        % cleans up the string and converts to a numeral nOut. Sets the
+        % appdata property 'valName' of fh to nOut.
+        % if nOut is NaN, reverts nOut to the value stored in the 'valName'
+        % property of fh.
+
+    strIn = get(handles.(tagName),'String');
+    
+    % ensures any non-numeric characters that were entered accidentally via hotkeys 
+    % are eliminated
+    strIn = regexprep(strIn, '[^0-9.]', '');
+    
+    % remove all dots except the leftmost one 
+    % Find indices of all dots
+    dotIdx = strfind(strIn, '.');
+    
+    % If more than one dot, remove all except the first
+    if numel(dotIdx) > 1
+        remove = dotIdx(2:end);
+    elseif isscalar(dotIdx)
+        if dotIdx(1) == length(strIn)
+            remove = dotIdx;
+        else
+            remove = [];
+        end
+    else
+        remove = [];
+    end
+    strIn(remove) = [];  % remove unwanted dots
+
+    set(handles.(tagName),'String',strIn); % clean up entry if needed
+    strIn = get(handles.(tagName),'String');
+    % Set selection to the end of the string
+    nOut = str2double(strIn);
+    if ~isnan(nOut)
+        setappdata(fh,valName,nOut);
+    else
+        % revert to previously vetted value of the entry
+        nOut = getappdata(fh,valName);
+        set(handles.(tagName),'String',num2str(nOut));
+    end
+end
+
 function plot_zoom_single_channel(x,y,z,width,alData,fh)
     
     handles = guihandles(fh); 
@@ -221,10 +267,9 @@ function plot_zoom_single_channel(x,y,z,width,alData,fh)
         [nx, ny] = size(alData.img);
         stack1 = alData.img;
     end
-   
-    Imin = str2double(get(handles.hImin,'String'));
-    Imax = str2double(get(handles.hImax,'String'));
-
+    Imin = getCleanNumberFromEditEntry(handles,'hImin',fh,'hIminVal');
+    Imax = getCleanNumberFromEditEntry(handles,'hImax',fh,'hImaxVal');
+    
     %computing the value of the local slice 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
@@ -510,8 +555,10 @@ function change_Iminmax(src,eventdata,alData,fh)
     
     handles = guihandles(fh);
     z = get(handles.zslider,'Value');
+    
     %replotting the main window
     plot_current_z_stack_single_channel(fh,alData,z);
+    
     %replotting the zoom window
     zoomwidth = str2double(get(handles.hzoom_width,'String'));
     [x,y] = get_current_pointer_position(fh); %I get the current (x,y) of the mouse
@@ -1233,7 +1280,8 @@ if nd == 3
                     'Tag','hglobal_Isd_Info_val',...
                     'Style','text','String',strIsd,...
                     'Position',[39,1,8,1.2]);             
-end            
+end   
+
 %contrast settings           
 uicontrol('Parent',ph,'Units','characters',...
                 'Style','pushbutton',...
