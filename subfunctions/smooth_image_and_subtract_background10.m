@@ -89,13 +89,13 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
     
     %% loop through masks
     smooth = zeros(size(img));
-    t = zeros(nm,10);
+    %t = zeros(nm,10);
     for i=1:nm 
         % crop rectangle ROI around mask 
-        t1 = tic;
+        %t1 = tic;
         [croppedImg,dx,dy,dz,idxCrop] = cropImageBasedOnMask(...
             img, mask, mList(i), paddingSize);
-        t(i,1) = toc(t1);
+        %t(i,1) = toc(t1);
         if ndims(mask) == ndims(img)
             croppedMask = false(size(croppedImg));
             croppedMask(idxCrop) = true;
@@ -107,33 +107,32 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
         
         % set the background around the mask to the value of the closest pixel
         % within the image - this mitigates boundary artefacts.
-        t2 = tic;
+        %t2 = tic;
         croppedImg = padWithObjectValues(croppedImg, croppedMask, true);
         %croppedImg = padWithObjectValuesLinIdx(croppedImg, idxCrop);
-        t(i,2) = toc(t2);
+        %t(i,2) = toc(t2);
         
         % smooth the cropped image
-        t3 = tic;
+        %t3 = tic;
         cs = smoothImg(croppedImg, filterHi, filterLo, psfSigma_xy);
-        t(i,3) = toc(t3);
+        %t(i,3) = toc(t3);
         
         % get mean & std of intensity over the mask region
-        t4 = tic;
+        %t4 = tic;
         %[~,s,m2,s2] = getMeanStdInMask(cs,croppedMask,true);
         [~,s,m2,s2] = getMeanStdInMaskLinIdx(cs,idxCrop,'downSample',100);
-        t(i,4) = toc(t4);
+        %t(i,4) = toc(t4);
         
         % subtract the mode within the mask, and divide by the estimate of
         % the STD
         croppedSmooth = zeros(size(cs));
         croppedSmooth(idxCrop) = cs(idxCrop);
-        %croppedSmooth(idxCrop) = ( croppedSmooth(idxCrop) - max(0,m2) ) / ((s2+s)/2);
         croppedSmooth(idxCrop) = ( croppedSmooth(idxCrop) - m2 ) / ((s2+s)/2);
         croppedSmooth(isinf(croppedSmooth) | croppedSmooth<0) = 0; % avoid any infinites, negatives
         
         % reassign pixels in the large image to the smoothed/normalized
         % values
-        t5 = tic;
+        %t5 = tic;
         if nd==2
             [nx, ny] = size(cs);
             smooth(dx:dx+nx-1,dy:dy+ny-1) = smooth(dx:dx+nx-1,dy:dy+ny-1) ...
@@ -144,9 +143,9 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
                 smooth(dx:dx+nx-1,dy:dy+ny-1,dz:dz+nz-1) ...
                 + croppedSmooth;
         end
-        t(i,5) = toc(t5);
+        %t(i,5) = toc(t5);
     end
-    sum(t)
+    %sum(t)
 end
 
 %%
@@ -367,7 +366,7 @@ function smooth = smoothImg(img, filterHi, filterLo, psfSigma_xy)
 
         %factors 1.5 is a heuristic attempt to reproduce results
         %from the Fourier filter given the same parameters
-        smooth = 1.5 * DOGfilter2(img, filterHi, filterLo * psfSigma_xy, [],[]);
+        smooth = 150 * DOGfilter2(img, filterHi, filterLo * psfSigma_xy, [],[]);
     else
         disp('data type error: smoothing only possible on 2d images or 3d stacks');
         smooth = 0;

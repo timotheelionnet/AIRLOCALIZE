@@ -57,11 +57,29 @@ params1m.psfSigma = psfSigma;
 img = timtiffread(imgName);
 mask = timtiffread(maskName);
 %%
-start0 = tic;
-smooth = smooth_image_and_subtract_background10(img,params1m,'mask',mask,'paddingSize',5);
-t = toc(start0)
-
+loList = 0.2:0.1:3;
+hiList = 0.2:0.1:3;
+numRegions = zeros(numel(loList),numel(hiList));
+for i = 1:numel(loList)
+    disp(['i = ',num2str(i),'/',num2str(numel(loList)),'...']);
+    for j = 1:numel(hiList)
+        params1m.filterLo = loList(i);
+        params1m.filterHi = loList(j);
+        smooth = 1000*smooth_image_and_subtract_background10(img,params1m,...
+            'mask',mask,'paddingSize',5);
+        t = toc(start0);
+        s = smooth(:,:,11);
+        m = max(s(mask == 14));
+        s(s<=m | mask ~= 17) = 0;
+        cc = bwconncomp(s);            % Find connected components
+        numRegions(i,j) = cc.NumObjects; 
+    end
+end
 save_as_tiff(smooth,'/Users/lionnt01/Documents/junk/testSmooth.tif');
+%%
+l = sub2ind( find(numRegions == max(numRegions(:)));
+loList(l)
+hiList(l)
 
 %% 
 start2 = tic;
