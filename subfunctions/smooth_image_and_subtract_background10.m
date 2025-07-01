@@ -120,14 +120,15 @@ function smooth = smoothInMasks(img,mask,filterHi, filterLo, psfSigma_xy,...
         % get mean & std of intensity over the mask region
         t4 = tic;
         %[~,s,m2,s2] = getMeanStdInMask(cs,croppedMask,true);
-        [~,s,m2,s2] = getMeanStdInMaskLinIdx(cs,idxCrop,'downSample',10);
+        [~,s,m2,s2] = getMeanStdInMaskLinIdx(cs,idxCrop,'downSample',100);
         t(i,4) = toc(t4);
         
         % subtract the mode within the mask, and divide by the estimate of
         % the STD
         croppedSmooth = zeros(size(cs));
         croppedSmooth(idxCrop) = cs(idxCrop);
-        croppedSmooth = ( croppedSmooth - max(0,m2) ) / ((s2+s)/2);
+        %croppedSmooth(idxCrop) = ( croppedSmooth(idxCrop) - max(0,m2) ) / ((s2+s)/2);
+        croppedSmooth(idxCrop) = ( croppedSmooth(idxCrop) - m2 ) / ((s2+s)/2);
         croppedSmooth(isinf(croppedSmooth) | croppedSmooth<0) = 0; % avoid any infinites, negatives
         
         % reassign pixels in the large image to the smoothed/normalized
@@ -363,7 +364,7 @@ end
 %%
 function smooth = smoothImg(img, filterHi, filterLo, psfSigma_xy)
     if ismember(ndims(img),[2,3])
-        
+
         %factors 1.5 is a heuristic attempt to reproduce results
         %from the Fourier filter given the same parameters
         smooth = 1.5 * DOGfilter2(img, filterHi, filterLo * psfSigma_xy, [],[]);
@@ -372,6 +373,16 @@ function smooth = smoothImg(img, filterHi, filterLo, psfSigma_xy)
         smooth = 0;
         return;
     end
+    % if ismember(ndims(img),[2,3])
+    % 
+    %     %factors 1.5 is a heuristic attempt to reproduce results
+    %     %from the Fourier filter given the same parameters
+    %     smooth = 1.5 * DOGfilter3(img, psfSigma_xy, 3, [],[]);
+    % else
+    %     disp('data type error: smoothing only possible on 2d images or 3d stacks');
+    %     smooth = 0;
+    %     return;
+    % end
 end
 
 %%
@@ -474,7 +485,9 @@ function [m,s,m2,s2,idxList] = getMeanStdInMaskLinIdx(img,idxList,varargin)
     %     m = NaN; s = NaN;m2 = NaN; s2 = NaN;
     %     return
     % end
-    img = img(idxList(1:ceil(downSample):numel(idxList))); % make sure this is a row vector
+
+    % downsample the indices if needed to accelerate, convert to vector
+    img = img(idxList(1:ceil(downSample):numel(idxList))); 
     m = mean(img);
     s = std(img);
     if useMode
@@ -486,9 +499,9 @@ function [m,s,m2,s2,idxList] = getMeanStdInMaskLinIdx(img,idxList,varargin)
         s2 = m2 - median(img(img <= m2));
     else
         % assign m2 to median by default
-        m2 = prctile(img,[0.25,0.5]);
+        m2 = prctile(img,[25,50]);
         s2 = m2(2) - m2(1);
-        m2 = m2(1);
+        m2 = m2(2);
     end   
 end
 
@@ -504,9 +517,9 @@ function xMode = estimateModeRobust(d,nBins)
     % OUTPUT
     % xMode is the estimated value of the mode
 
-    % generates a binning grid so that there are nBins between the 20th and
-    % 80th percentile of the dataset data.
-    d = d(d > prctile(d,0.3) & d < prctile(d,0.7));
+    % generates a binning grid so that there are nBins between the 30th and
+    % 70th percentile of the dataset data.
+    d = d(d > prctile(d,30) & d < prctile(d,70));
     trimDist = 1;
     [binEdges,d] = computeRobustHistBins(d,nBins,trimDist); 
     [n,x] = hist(d,binEdges);
